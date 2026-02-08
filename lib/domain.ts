@@ -51,7 +51,7 @@ export async function resolveMerchantFromHost(host: string) {
   const normalizedHost = normalizeHost(host)
 
   // Look up merchant by custom domain
-  const merchant = await prisma.merchant.findUnique({
+  const merchant = await prisma.merchant.findFirst({
     where: { customDomain: normalizedHost },
     include: {
       storefront: true,

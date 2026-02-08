@@ -8,7 +8,7 @@ export default async function DashboardPage() {
   const merchant = await requireMerchant()
 
   // Get stats - all queries scoped to merchant.id for tenant isolation
-  const [productCount, orderCount, paidPayments] = await Promise.all([
+  const [productCount, orderCount, paidPaymentsRaw] = await Promise.all([
     prisma.product.count({ where: { merchantId: merchant.id } }),
     prisma.order.count({ where: { merchantId: merchant.id } }),
     prisma.payment.findMany({
@@ -17,7 +17,12 @@ export default async function DashboardPage() {
     }),
   ])
 
-  const totalRevenue = paidPayments.reduce((sum, p) => sum + p.amount.toNumber(), 0)
+  // Convert Decimal fields to numbers at data boundary
+  const paidPayments = paidPaymentsRaw.map((p) => ({
+    amount: p.amount.toNumber(),
+  }))
+
+  const totalRevenue = paidPayments.reduce((sum, p) => sum + p.amount, 0)
 
   return (
     <div className="space-y-8">

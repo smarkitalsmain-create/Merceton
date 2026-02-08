@@ -417,7 +417,7 @@ export function StorefrontSettingsForm({ merchantId }: StorefrontSettingsFormPro
 
           {!settings?.publishedAt && (
             <p className="text-sm text-muted-foreground">
-              Your storefront is not published yet. Customers will see a "Store not published" message.
+              {`Your storefront is not published yet. Customers will see a "Store not published" message.`}
             </p>
           )}
         </CardContent>

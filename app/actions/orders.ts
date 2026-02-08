@@ -19,7 +19,7 @@ export async function createOrder(input: unknown) {
     })
     // Verify merchant exists
     const merchant = await prisma.merchant.findUnique({
-      where: { id: input.merchantId, slug: input.storeSlug, isActive: true },
+      where: { id: validatedInput.merchantId, slug: validatedInput.storeSlug, isActive: true },
     })
 
     if (!merchant) {
@@ -48,7 +48,7 @@ export async function createOrder(input: unknown) {
       price: number
     }> = []
 
-    for (const item of input.items) {
+    for (const item of validatedInput.items) {
       const product = products.find((p) => p.id === item.productId)
       if (!product) {
         return { success: false, error: `Product ${item.productId} not found` }
@@ -144,7 +144,11 @@ export async function createOrder(input: unknown) {
 
       // Update stock (prevent negative)
       for (const item of validatedInput.items) {
-        const product = products.find((p) => p.id === item.productId)!
+        const product = products.find((p) => p.id === item.productId)
+        if (!product) {
+          throw new Error(`Product ${item.productId} not found`)
+        }
+        
         await tx.product.update({
           where: { id: product.id },
           data: {
@@ -198,7 +202,7 @@ export async function createOrder(input: unknown) {
       return newOrder
     })
 
-    revalidatePath(`/s/${input.storeSlug}`)
+    revalidatePath(`/s/${validatedInput.storeSlug}`)
     return { success: true, order }
   } catch (error) {
     console.error("Create order error:", error)

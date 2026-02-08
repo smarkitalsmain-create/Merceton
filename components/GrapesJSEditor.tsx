@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Save, Eye, Rocket } from "lucide-react"
 
+// Declare GrapesJS at module scope
+let GrapesJS: typeof import("grapesjs").default | null = null
+
 interface GrapesJSEditorProps {
   merchantId: string
   merchantSlug: string
@@ -85,9 +88,9 @@ export function GrapesJSEditor({
                 type: "select",
                 defaults: "32px",
                 options: [
-                  { value: "12px", name: "Tiny" },
-                  { value: "18px", name: "Medium" },
-                  { value: "32px", name: "Big" },
+                  { id: "12px", value: "12px", name: "Tiny" },
+                  { id: "18px", value: "18px", name: "Medium" },
+                  { id: "32px", value: "32px", name: "Big" },
                 ],
               },
             ],

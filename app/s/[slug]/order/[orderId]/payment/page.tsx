@@ -41,11 +41,31 @@ export default async function PaymentPage({
     notFound()
   }
 
+  // Transform Prisma models to component-friendly types (convert Decimal to number)
+  const transformedOrder = {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    items: order.items.map((item) => ({
+      product: {
+        name: item.product.name,
+      },
+      quantity: item.quantity,
+      price: item.price / 100, // Convert from paise (Int) to INR (number) for display
+    })),
+  }
+
+  const transformedPayment = {
+    id: order.payment.id,
+    amount: order.payment.amount.toNumber(), // Convert Decimal to number
+    paymentMethod: order.payment.paymentMethod,
+    status: order.payment.status,
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <h1 className="text-3xl font-bold mb-8">Complete Payment</h1>
-        <PaymentForm order={order} payment={order.payment} />
+        <PaymentForm order={transformedOrder} payment={transformedPayment} />
       </main>
     </div>
   )

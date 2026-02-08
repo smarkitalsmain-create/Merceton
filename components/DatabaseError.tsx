@@ -29,7 +29,7 @@ export function DatabaseError() {
               <li>
                 Add it to <code className="bg-muted px-1 py-0.5 rounded">.env.local</code> as:
                 <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-x-auto">
-                  DATABASE_URL="your-connection-string-here"
+                  {`DATABASE_URL="your-connection-string-here"`}
                 </pre>
               </li>
               <li>Restart your development server</li>

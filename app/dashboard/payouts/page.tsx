@@ -7,7 +7,7 @@ export default async function PayoutsPage() {
   const merchant = await requireMerchant()
 
   // Get all orders for this merchant
-  const orders = await prisma.order.findMany({
+  const ordersRaw = await prisma.order.findMany({
     where: { merchantId: merchant.id },
     select: {
       grossAmount: true,
@@ -22,12 +22,20 @@ export default async function PayoutsPage() {
     },
   })
 
+  // Convert Decimal fields to numbers at data boundary
+  const orders = ordersRaw.map((order) => ({
+    ...order,
+    grossAmount: order.grossAmount.toNumber(),
+    platformFee: order.platformFee.toNumber(),
+    netPayable: order.netPayable.toNumber(),
+  }))
+
   // Calculate totals
   const totals = orders.reduce(
     (acc, order) => {
-      acc.totalGross += order.grossAmount.toNumber()
-      acc.totalFees += order.platformFee.toNumber()
-      acc.totalNet += order.netPayable.toNumber()
+      acc.totalGross += order.grossAmount
+      acc.totalFees += order.platformFee
+      acc.totalNet += order.netPayable
       return acc
     },
     { totalGross: 0, totalFees: 0, totalNet: 0 }
@@ -37,16 +45,16 @@ export default async function PayoutsPage() {
   const paidOrders = orders.filter((o) => o.payment?.status === "PAID")
   const paidTotals = paidOrders.reduce(
     (acc, order) => {
-      acc.totalGross += order.grossAmount.toNumber()
-      acc.totalFees += order.platformFee.toNumber()
-      acc.totalNet += order.netPayable.toNumber()
+      acc.totalGross += order.grossAmount
+      acc.totalFees += order.platformFee
+      acc.totalNet += order.netPayable
       return acc
     },
     { totalGross: 0, totalFees: 0, totalNet: 0 }
   )
 
   // Get ledger entries for detailed view
-  const ledgerEntries = await prisma.ledgerEntry.findMany({
+  const ledgerEntriesRaw = await prisma.ledgerEntry.findMany({
     where: {
       merchantId: merchant.id,
       type: { in: ["GROSS_ORDER_VALUE", "PLATFORM_FEE", "ORDER_PAYOUT"] },
@@ -62,6 +70,12 @@ export default async function PayoutsPage() {
     orderBy: { createdAt: "desc" },
     take: 100,
   })
+
+  // Convert Decimal fields to numbers at data boundary
+  const ledgerEntries = ledgerEntriesRaw.map((entry) => ({
+    ...entry,
+    amount: entry.amount.toNumber(),
+  }))
 
   return (
     <div className="space-y-8">
@@ -158,10 +172,10 @@ export default async function PayoutsPage() {
                   <div className="text-right">
                     <p
                       className={`font-bold ${
-                        entry.amount.toNumber() >= 0 ? "text-green-600" : "text-red-600"
+                        entry.amount >= 0 ? "text-green-600" : "text-red-600"
                       }`}
                     >
-                      {entry.amount.toNumber() >= 0 ? "+" : ""}
+                      {entry.amount >= 0 ? "+" : ""}
                       ₹{entry.amount.toFixed(2)}
                     </p>
                     <p className="text-xs text-muted-foreground">{entry.status}</p>

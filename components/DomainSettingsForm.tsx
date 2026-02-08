@@ -253,7 +253,7 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              After adding the DNS record, click "Verify Domain" to check verification.
+              {`After adding the DNS record, click "Verify Domain" to check verification.`}{" "}
               DNS changes may take a few minutes to propagate.
             </p>
           </CardContent>

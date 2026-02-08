@@ -121,3 +121,16 @@ export async function authorizeRequest(resourceMerchantId?: string) {
 
   return { user, merchant: user.merchant }
 }
+
+/**
+ * Get current merchant (nullable) - does not redirect
+ * Returns null if user has no merchant
+ */
+export async function getCurrentMerchant() {
+  try {
+    const user = await requireUser()
+    return user.merchant || null
+  } catch {
+    return null
+  }
+}

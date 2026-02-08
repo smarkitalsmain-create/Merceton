@@ -33,15 +33,23 @@ export async function POST(request: NextRequest) {
       include: { payment: true },
     })
 
-    if (!order || !order.payment) {
+    if (!order) {
       return NextResponse.json(
-        { error: "Order or payment not found" },
+        { error: "Order not found" },
         { status: 404 }
       )
     }
 
+    if (!order.payment) {
+      throw new Error("Payment record not found for this order")
+    }
+
+    // Normalize payment to non-null variable
+    const payment = order.payment
+    const paymentId = payment.id
+
     // Prevent duplicate processing
-    if (order.payment.status === "PAID") {
+    if (payment.status === "PAID") {
       return NextResponse.json(
         { success: true, message: "Payment already processed" },
         { status: 200 }
@@ -76,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify Razorpay order ID matches
-    if (order.payment.razorpayOrderId !== razorpayOrderId) {
+    if (payment.razorpayOrderId !== razorpayOrderId) {
       return NextResponse.json(
         { error: "Razorpay order ID mismatch" },
         { status: 400 }
@@ -87,7 +95,7 @@ export async function POST(request: NextRequest) {
     await prisma.$transaction(async (tx) => {
       // Update payment status
       await tx.payment.update({
-        where: { id: order.payment.id },
+        where: { id: paymentId },
         data: {
           status: "PAID",
           razorpayPaymentId,

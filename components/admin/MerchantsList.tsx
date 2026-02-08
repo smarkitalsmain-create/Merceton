@@ -124,8 +124,8 @@ export function MerchantsList() {
   return (
     <div className="space-y-4">
       {merchants.map((merchant) => {
-        const totalGMV = merchant.orders.reduce((sum, o) => sum + Number(o.grossAmount), 0)
-        const totalFees = merchant.orders.reduce((sum, o) => sum + Number(o.platformFee), 0)
+        const totalGMV = merchant.orders.reduce((sum, o) => sum + o.grossAmount, 0)
+        const totalFees = merchant.orders.reduce((sum, o) => sum + o.platformFee, 0)
         const isEditing = editingId === merchant.id
 
         return (

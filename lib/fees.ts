@@ -33,30 +33,29 @@ export function calculatePlatformFee(
   grossAmountInPaise: number,
   config?: FeeConfig | null
 ): number {
-  const feeConfig: Required<FeeConfig> = {
-    percentageBps: config?.percentageBps ?? DEFAULT_FEE_CONFIG.percentageBps,
-    flatPaise: config?.flatPaise ?? DEFAULT_FEE_CONFIG.flatPaise,
-    maxCapPaise: config?.maxCapPaise ?? DEFAULT_FEE_CONFIG.maxCapPaise,
-  }
+  // Normalize nullable fee configuration values to numbers
+  const percentageBps = config?.percentageBps ?? DEFAULT_FEE_CONFIG.percentageBps ?? 0
+  const flatPaise = config?.flatPaise ?? DEFAULT_FEE_CONFIG.flatPaise ?? 0
+  const maxCapPaise = config?.maxCapPaise ?? DEFAULT_FEE_CONFIG.maxCapPaise ?? 0
 
   let fee = 0
 
   // Calculate percentage fee
-  if (feeConfig.percentageBps > 0) {
+  if (percentageBps > 0) {
     const percentageFee = Math.round(
-      (grossAmountInPaise * feeConfig.percentageBps) / 10000
+      (grossAmountInPaise * percentageBps) / 10000
     )
     fee += percentageFee
   }
 
   // Add flat fee
-  if (feeConfig.flatPaise > 0) {
-    fee += feeConfig.flatPaise
+  if (flatPaise > 0) {
+    fee += flatPaise
   }
 
   // Apply maximum cap
-  if (feeConfig.maxCapPaise > 0 && fee > feeConfig.maxCapPaise) {
-    fee = feeConfig.maxCapPaise
+  if (maxCapPaise > 0 && fee > maxCapPaise) {
+    fee = maxCapPaise
   }
 
   // Ensure fee doesn't exceed gross amount

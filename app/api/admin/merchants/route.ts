@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireAdmin()
 
-    const merchants = await prisma.merchant.findMany({
+    const merchantsRaw = await prisma.merchant.findMany({
       include: {
         _count: {
           select: {
@@ -30,6 +30,15 @@ export async function GET(request: NextRequest) {
         createdAt: "desc",
       },
     })
+
+    // Convert Decimal fields to numbers at data boundary
+    const merchants = merchantsRaw.map((merchant) => ({
+      ...merchant,
+      orders: merchant.orders.map((order) => ({
+        grossAmount: order.grossAmount.toNumber(),
+        platformFee: order.platformFee.toNumber(),
+      })),
+    }))
 
     return NextResponse.json(merchants)
   } catch (error) {

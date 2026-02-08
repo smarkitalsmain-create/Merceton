@@ -1,12 +1,26 @@
 import Razorpay from "razorpay"
 
-if (!process.env.RAZORPAY_KEY_SECRET) {
-  throw new Error("RAZORPAY_KEY_SECRET is not set")
+// Lazy initialization to prevent build-time crashes
+let razorpayInstance: Razorpay | null = null
+
+function getRazorpay(): Razorpay {
+  if (!razorpayInstance) {
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      throw new Error("RAZORPAY_KEY_SECRET is not set")
+    }
+    razorpayInstance = new Razorpay({
+      key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "",
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    })
+  }
+  return razorpayInstance
 }
 
-export const razorpay = new Razorpay({
-  key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "",
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
+// Export proxy that lazily initializes Razorpay (prevents build-time crashes)
+export const razorpay = new Proxy({} as Razorpay, {
+  get(_target, prop) {
+    return getRazorpay()[prop as keyof Razorpay]
+  },
 })
 
 // Platform fee percentage (default 5%)

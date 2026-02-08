@@ -26,7 +26,7 @@ export default async function StorefrontPage() {
       merchantId={merchant.id}
       merchantSlug={merchant.slug}
       initialData={{
-        builderJson: storefront.builderJson as any,
+        builderJson: storefront.builderJson ?? null,
         builderHtml: storefront.builderHtml,
         builderCss: storefront.builderCss,
       }}

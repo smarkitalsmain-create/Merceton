@@ -25,6 +25,7 @@ export default async function AdminPage() {
     }),
   ])
 
+  // Convert Decimal fields to numbers at data boundary
   const gmv = totalGMV._sum.grossAmount?.toNumber() || 0
   const fees = Math.abs(totalFees._sum.amount?.toNumber() || 0) // Fees are negative in ledger
 

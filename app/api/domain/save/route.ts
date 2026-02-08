@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if domain is already taken by another merchant
-    const existing = await prisma.merchant.findUnique({
+    const existing = await prisma.merchant.findFirst({
       where: { customDomain: normalized },
     })
 

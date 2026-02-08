@@ -208,7 +208,7 @@ export function DomainSettings({ merchant: initialMerchant }: DomainSettingsProp
               <div><strong>Value:</strong> {merchant.domainVerificationToken}</div>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              After adding the DNS record, click "Verify Domain" to check verification.
+              {`After adding the DNS record, click "Verify Domain" to check verification.`}
             </p>
           </div>
         )}

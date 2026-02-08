@@ -27,7 +27,7 @@ export default async function OrdersPage() {
   const merchant = await requireMerchant()
 
   // Get orders - scoped to merchant.id for tenant isolation
-  const orders = await prisma.order.findMany({
+  const ordersRaw = await prisma.order.findMany({
     where: { merchantId: merchant.id },
     include: {
       items: {
@@ -40,6 +40,14 @@ export default async function OrdersPage() {
     orderBy: { createdAt: "desc" },
     take: 50, // Limit for MVP
   })
+
+  // Convert Decimal fields to numbers at data boundary
+  const orders = ordersRaw.map((order) => ({
+    ...order,
+    grossAmount: order.grossAmount.toNumber(),
+    platformFee: order.platformFee.toNumber(),
+    netPayable: order.netPayable.toNumber(),
+  }))
 
   return (
     <div className="space-y-8">
