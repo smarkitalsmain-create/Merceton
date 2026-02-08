@@ -1,0 +1,349 @@
+// Multi-tenant Ecommerce SaaS Schema
+// Every record is scoped to merchantId for data isolation
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// TENANT & USER MANAGEMENT
+// ============================================================================
+
+model Merchant {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  displayName String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Custom domain configuration
+  // NOTE: do NOT keep @unique here for production-grade behavior.
+  customDomain            String?
+  domainStatus            DomainStatus @default(PENDING)
+  domainVerificationToken String?
+  domainVerifiedAt        DateTime?
+
+  // Platform fee configuration
+  feePercentageBps Int?
+  feeFlatPaise     Int?
+  feeMaxCapPaise   Int?
+
+  // Relations
+  users         User[]
+  storefront    StorefrontSettings?
+  products      Product[]
+  orders        Order[]
+  payments      Payment[]
+  ledgerEntries LedgerEntry[]
+  payoutBatches PayoutBatch[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@index([customDomain])
+  @@index([customDomain, domainStatus])
+
+  @@map("merchants")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  merchantId String?
+  authUserId String   @unique
+  email      String
+  name       String?
+  role       UserRole @default(ADMIN)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  merchant Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  @@index([merchantId])
+  @@index([authUserId])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  ACTIVE
+}
+
+// ============================================================================
+// STOREFRONT
+// ============================================================================
+
+model StorefrontSettings {
+  id         String   @id @default(cuid())
+  merchantId String   @unique
+
+  mode        StorefrontMode @default(THEME)
+
+  // Theme-based storefront
+  theme       String? @default("minimal")
+  themeConfig Json?
+
+  // Custom code storefront
+  customHtml  String? @db.Text
+  customCss   String? @db.Text
+  customJs    String? @db.Text
+
+  // Builder storefront (GrapesJS / future editor)
+  builderJson Json?
+  builderHtml String? @db.Text
+  builderCss  String? @db.Text
+
+  // Common
+  logoUrl     String?
+  publishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@map("storefront_settings")
+}
+
+enum StorefrontMode {
+  THEME
+  BUILDER
+  CUSTOM_CODE
+}
+
+// ============================================================================
+// CATALOG
+// ============================================================================
+
+model Product {
+  id          String   @id @default(cuid())
+  merchantId  String
+  name        String
+  description String?
+  price       Int
+  mrp         Int?
+  sku         String?
+  stock       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  merchant   Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  images     ProductImage[]
+  orderItems OrderItem[]
+
+  @@index([merchantId])
+  @@index([merchantId, isActive])
+  @@index([merchantId, createdAt])
+  @@index([sku])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  alt       String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([productId, sortOrder])
+  @@map("product_images")
+}
+
+// ============================================================================
+// ORDERS
+// ============================================================================
+
+model Order {
+  id              String      @id @default(cuid())
+  merchantId      String
+  orderNumber     String
+  customerName    String
+  customerEmail   String
+  customerPhone   String?
+  customerAddress String
+  status          OrderStatus @default(PENDING)
+
+  grossAmount Decimal @db.Decimal(10, 2)
+  platformFee Decimal @db.Decimal(10, 2)
+  netPayable  Decimal @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  merchant      Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  items         OrderItem[]
+  payment       Payment?
+  ledgerEntries LedgerEntry[]
+
+  @@unique([merchantId, orderNumber])
+  @@index([merchantId])
+  @@index([merchantId, status])
+  @@index([merchantId, createdAt])
+  @@index([orderNumber])
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  PLACED
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+// Order items
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Int
+  createdAt DateTime @default(now())
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+model Payment {
+  id            String        @id @default(cuid())
+  merchantId    String
+  orderId       String        @unique
+  paymentMethod PaymentMethod
+  status        PaymentStatus @default(PENDING)
+
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  razorpaySignature String?
+
+  upiTransactionId String?
+
+  codCollected   Boolean   @default(false)
+  codCollectedAt DateTime?
+
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([merchantId, status])
+  @@index([orderId])
+  @@index([razorpayOrderId])
+  @@index([razorpayPaymentId])
+  @@index([merchantId, createdAt])
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  RAZORPAY
+  COD
+  UPI
+}
+
+enum PaymentStatus {
+  CREATED
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+// ============================================================================
+// LEDGER & PAYOUTS
+// ============================================================================
+
+model LedgerEntry {
+  id            String       @id @default(cuid())
+  merchantId    String
+  orderId       String
+  type          LedgerType
+  amount        Decimal      @db.Decimal(10, 2)
+  description   String?
+  status        LedgerStatus @default(PENDING)
+  payoutBatchId String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  merchant    Merchant     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  payoutBatch PayoutBatch? @relation(fields: [payoutBatchId], references: [id], onDelete: SetNull)
+
+  @@index([merchantId])
+  @@index([merchantId, type])
+  @@index([merchantId, status])
+  @@index([orderId])
+  @@index([payoutBatchId])
+  @@index([merchantId, createdAt])
+  @@map("ledger_entries")
+}
+
+enum LedgerType {
+  GROSS_ORDER_VALUE
+  PLATFORM_FEE
+  ORDER_PAYOUT
+  PAYOUT_PROCESSED
+}
+
+enum LedgerStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model PayoutBatch {
+  id              String       @id @default(cuid())
+  merchantId       String
+  totalAmount      Decimal      @db.Decimal(10, 2)
+  status           PayoutStatus @default(PENDING)
+  razorpayPayoutId String?
+  processedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  merchant      Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  ledgerEntries LedgerEntry[]
+
+  @@index([merchantId])
+  @@index([merchantId, status])
+  @@index([merchantId, createdAt])
+  @@index([razorpayPayoutId])
+  @@map("payout_batches")
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
