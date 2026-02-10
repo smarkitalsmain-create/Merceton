@@ -2,7 +2,7 @@ export const runtime = "nodejs"
 
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaTx } from "@/lib/prisma";
 
 function slugify(input: string) {
   return input
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ merchant: existing, alreadySetup: true }, { status: 200 });
     }
 
-    // Slug uniqueness check
+    // Slug uniqueness check (BEFORE transaction)
     const slugTaken = await prisma.merchant.findUnique({ where: { slug } });
     if (slugTaken) {
       return NextResponse.json(
@@ -66,8 +66,51 @@ export async function POST(req: Request) {
       );
     }
 
-    // Create merchant + storefront + link user in ONE transaction
-    const result = await prisma.$transaction(async (tx) => {
+    // Get default pricing package (BEFORE transaction)
+    const platformSettings = await prisma.platformSettings.findUnique({
+      where: { id: "singleton" },
+      select: { defaultPricingPackageId: true },
+    })
+
+    // Prepare layout JSON (BEFORE transaction - no computation inside)
+    const defaultLayoutJson = {
+      sections: [
+        {
+          id: "hero-1",
+          type: "hero",
+          settings: {
+            headline: `Welcome to ${displayName}`,
+            subheadline: "Browse our latest products and offers.",
+            ctaText: "Shop Now",
+            ctaLink: `/s/${slug}`,
+          },
+        },
+        {
+          id: "products-1",
+          type: "productGrid",
+          settings: {
+            title: "Featured Products",
+            collection: "featured",
+            limit: 8,
+          },
+        },
+        {
+          id: "footer-1",
+          type: "footer",
+          settings: {
+            brandName: displayName,
+            links: [],
+          },
+        },
+      ],
+    }
+
+    // Create merchant + storefront + default home page + fee config + link user in ONE transaction (DB-only)
+    // Use prismaTx (DIRECT_URL) for this heavy onboarding transaction
+    console.time("TX:merchant/setup:POST")
+    let queryCount = 0
+    const result = await prismaTx.$transaction(async (tx) => {
+      queryCount++
       const merchant = await tx.merchant.create({
         data: {
           displayName,
@@ -78,25 +121,47 @@ export async function POST(req: Request) {
               theme: "minimal",
             },
           },
+          pages: {
+            create: {
+              slug: "home",
+              title: `${displayName} Home`,
+              layoutJson: defaultLayoutJson,
+              isPublished: true,
+            },
+          },
+          feeConfig: {
+            create: {
+              pricingPackageId: platformSettings?.defaultPricingPackageId || null,
+            },
+          },
         },
       });
 
+      queryCount++
+      // Remove include to reduce query overhead - we can fetch separately if needed
       const user = await tx.user.update({
         where: { authUserId: userId },
         data: {
           merchantId: merchant.id,
           role: "ADMIN",
         },
-        include: { merchant: true },
       });
 
       return { merchant, user };
+    }, { timeout: 20000, maxWait: 20000 });
+    console.timeEnd(`TX:merchant/setup:POST (${queryCount} queries)`)
+    
+    // Fetch user with merchant relation AFTER transaction if needed
+    const userWithMerchant = await prisma.user.findUnique({
+      where: { authUserId: userId },
+      include: { merchant: true },
     });
-
+    
     return NextResponse.json(
-      { merchant: result.merchant, user: result.user },
+      { merchant: result.merchant, user: userWithMerchant || result.user },
       { status: 201 }
     );
+
   } catch (err: any) {
     console.error("POST /api/merchant/setup failed:", err);
 

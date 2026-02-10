@@ -2,9 +2,11 @@ import { requireMerchant } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatCurrency } from "@/lib/utils/currency"
+import { getEffectiveFeeConfig } from "@/lib/pricing"
 
 export default async function PayoutsPage() {
   const merchant = await requireMerchant()
+  const effectiveConfig = await getEffectiveFeeConfig(merchant.id)
 
   // Get all orders for this merchant
   const ordersRaw = await prisma.order.findMany({
@@ -190,38 +192,30 @@ export default async function PayoutsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Fee Configuration</CardTitle>
-          <CardDescription>Current platform fee settings</CardDescription>
+          <CardDescription>Current platform fee settings (read-only)</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
             <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Percentage Fee:</span>
+              <span className="text-sm text-muted-foreground">Fixed Fee:</span>
               <span className="font-medium">
-                {merchant.feePercentageBps
-                  ? `${merchant.feePercentageBps / 100}%`
-                  : "2% (default)"}
+                ₹{(effectiveConfig.fixedFeePaise / 100).toFixed(2)} per order
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Flat Fee:</span>
+              <span className="text-sm text-muted-foreground">Variable Fee:</span>
               <span className="font-medium">
-                {merchant.feeFlatPaise
-                  ? `₹${(merchant.feeFlatPaise / 100).toFixed(2)}`
-                  : "₹5.00 (default)"}
+                {effectiveConfig.variableFeeBps / 100}% per order
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Maximum Cap:</span>
+              <span className="text-sm text-muted-foreground">Pricing Package:</span>
               <span className="font-medium">
-                {merchant.feeMaxCapPaise
-                  ? `₹${(merchant.feeMaxCapPaise / 100).toFixed(2)}`
-                  : "₹25.00 (default)"}
+                {effectiveConfig.packageName || "Default"}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-4">
-              Fee calculation: {merchant.feePercentageBps ? `${merchant.feePercentageBps / 100}%` : "2%"} +{" "}
-              {merchant.feeFlatPaise ? `₹${(merchant.feeFlatPaise / 100).toFixed(2)}` : "₹5.00"} (max{" "}
-              {merchant.feeMaxCapPaise ? `₹${(merchant.feeMaxCapPaise / 100).toFixed(2)}` : "₹25.00"})
+            <p className="text-xs text-muted-foreground mt-2">
+              Fee configuration is managed by platform administrators. Contact support for changes.
             </p>
           </div>
         </CardContent>

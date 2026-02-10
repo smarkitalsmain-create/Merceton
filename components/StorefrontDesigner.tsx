@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Palette, Code, Upload, X } from "lucide-react"
 import { uploadToCloudinary } from "@/lib/cloudinary"
+import { publishStorefront, unpublishStorefront } from "@/app/dashboard/storefront/actions"
 import Image from "next/image"
 
 type StorefrontMode = "THEME" | "CUSTOM_CODE"
@@ -200,17 +201,7 @@ export function StorefrontDesigner({
   const handlePublish = () => {
     startTransition(async () => {
       try {
-        const response = await fetch("/api/storefront/publish", {
-          method: "POST",
-        })
-
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || "Failed to publish")
-        }
-
-        const data = await response.json()
-        setStorefront(data.storefront)
+        await publishStorefront()
         toast({
           title: "Published",
           description: "Your storefront has been published successfully.",
@@ -226,8 +217,75 @@ export function StorefrontDesigner({
     })
   }
 
+  const handleUnpublish = () => {
+    startTransition(async () => {
+      try {
+        await unpublishStorefront()
+        toast({
+          title: "Unpublished",
+          description: "Your storefront has been unpublished.",
+        })
+        router.refresh()
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to unpublish",
+          variant: "destructive",
+        })
+      }
+    })
+  }
+
   return (
     <div className="space-y-6">
+      {/* Status + Actions */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Badge variant={storefront.publishedAt ? "default" : "outline"}>
+              {storefront.publishedAt ? "Published" : "Draft"}
+            </Badge>
+            {storefront.publishedAt && (
+              <span className="text-xs text-muted-foreground">
+                Last published: {new Date(storefront.publishedAt).toLocaleString()}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {storefront.publishedAt ? (
+            <Button
+              variant="outline"
+              onClick={handleUnpublish}
+              disabled={isPending}
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Unpublishing...
+                </>
+              ) : (
+                "Unpublish"
+              )}
+            </Button>
+          ) : (
+            <Button
+              onClick={handlePublish}
+              disabled={isPending || (storefront.mode === "CUSTOM_CODE" && !storefront.customHtml)}
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Publishing...
+                </>
+              ) : (
+                "Publish"
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+
       {/* Tab Navigation */}
       <div className="flex gap-2 border-b">
         <button
@@ -463,32 +521,7 @@ export function StorefrontDesigner({
                     "Save Code"
                   )}
                 </Button>
-                <Button
-                  onClick={handlePublish}
-                  disabled={isPending || !storefront.customHtml}
-                  variant="default"
-                >
-                  {isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Publishing...
-                    </>
-                  ) : (
-                    "Publish"
-                  )}
-                </Button>
               </div>
-
-              {storefront.publishedAt && (
-                <div className="mt-4">
-                  <Badge variant="outline" className="mr-2">
-                    Published
-                  </Badge>
-                  <span className="text-sm text-muted-foreground">
-                    Last published: {new Date(storefront.publishedAt).toLocaleString()}
-                  </span>
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>

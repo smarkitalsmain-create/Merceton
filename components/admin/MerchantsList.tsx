@@ -59,8 +59,13 @@ export function MerchantsList() {
   }, [toast])
 
   const handleToggleStatus = (merchantId: string, currentStatus: boolean) => {
+    const reason = prompt(
+      `Reason for ${currentStatus ? "deactivating" : "activating"} this merchant:`
+    )
+    if (!reason) return
+
     startTransition(async () => {
-      const result = await toggleMerchantStatus(merchantId, !currentStatus)
+      const result = await toggleMerchantStatus(merchantId, !currentStatus, reason)
       if (result.success) {
         setMerchants((prev) =>
           prev.map((m) => (m.id === merchantId ? { ...m, isActive: result.merchant.isActive } : m))
@@ -83,12 +88,19 @@ export function MerchantsList() {
   }
 
   const handleSaveFeeConfig = (merchantId: string) => {
+    const reason = prompt("Reason for updating legacy fee config:")
+    if (!reason) return
+
     startTransition(async () => {
-      const result = await updateMerchantFeeConfig(merchantId, {
-        feePercentageBps: feeConfig.feePercentageBps ? parseInt(feeConfig.feePercentageBps) : null,
-        feeFlatPaise: feeConfig.feeFlatPaise ? parseInt(feeConfig.feeFlatPaise) : null,
-        feeMaxCapPaise: feeConfig.feeMaxCapPaise ? parseInt(feeConfig.feeMaxCapPaise) : null,
-      })
+      const result = await updateMerchantFeeConfig(
+        merchantId,
+        {
+          feePercentageBps: feeConfig.feePercentageBps ? parseInt(feeConfig.feePercentageBps) : null,
+          feeFlatPaise: feeConfig.feeFlatPaise ? parseInt(feeConfig.feeFlatPaise) : null,
+          feeMaxCapPaise: feeConfig.feeMaxCapPaise ? parseInt(feeConfig.feeMaxCapPaise) : null,
+        },
+        reason
+      )
 
       if (result.success) {
         setMerchants((prev) =>

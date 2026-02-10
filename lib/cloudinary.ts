@@ -1,26 +1,43 @@
 /**
- * Upload a file to Cloudinary using unsigned upload with signature
+ * Upload a file to Cloudinary using a signed upload (no unsigned presets).
  */
 export async function uploadToCloudinary(
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<{ url: string; publicId: string }> {
   // Step 1: Get signature from our API
-  const signResponse = await fetch("/api/upload/cloudinary-sign", {
-    method: "POST",
-  })
-
-  if (!signResponse.ok) {
-    throw new Error("Failed to get Cloudinary signature")
+  let signResponse: Response
+  try {
+    signResponse = await fetch("/api/cloudinary/sign", {
+      method: "POST",
+    })
+  } catch (error) {
+    console.error("Cloudinary sign request failed:", error)
+    throw new Error("Failed to contact Cloudinary sign endpoint")
   }
 
-  const { timestamp, signature, apiKey, cloudName } = await signResponse.json()
+  if (!signResponse.ok) {
+    let message = "Failed to get Cloudinary signature"
+    try {
+      const data = await signResponse.json()
+      if (data?.error) {
+        message = data.error
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+    console.error("Cloudinary sign error response:", signResponse.status, message)
+    throw new Error(message)
+  }
 
-  // Step 2: Upload to Cloudinary
+  const { timestamp, signature, apiKey, cloudName, folder } = await signResponse.json()
+
+  // Step 2: Upload to Cloudinary with signed parameters
   const formData = new FormData()
   formData.append("file", file)
   formData.append("api_key", apiKey)
   formData.append("timestamp", timestamp.toString())
+  formData.append("folder", folder)
   formData.append("signature", signature)
 
   const xhr = new XMLHttpRequest()
@@ -42,14 +59,17 @@ export async function uploadToCloudinary(
             publicId: response.public_id,
           })
         } catch (error) {
+          console.error("Cloudinary response parse error:", error)
           reject(new Error("Failed to parse Cloudinary response"))
         }
       } else {
-        reject(new Error(`Upload failed: ${xhr.statusText}`))
+        console.error("Cloudinary upload failed:", xhr.status, xhr.responseText)
+        reject(new Error(`Upload failed: ${xhr.statusText || xhr.status}`))
       }
     })
 
     xhr.addEventListener("error", () => {
+      console.error("Cloudinary upload network error")
       reject(new Error("Upload failed"))
     })
 
@@ -57,3 +77,4 @@ export async function uploadToCloudinary(
     xhr.send(formData)
   })
 }
+

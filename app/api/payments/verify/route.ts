@@ -93,35 +93,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update payment and order status in transaction
-    await prisma.$transaction(async (tx) => {
-      // Update payment status
-      await tx.payment.update({
+    // Update payment and order status - convert to batch transaction (independent operations)
+    console.time("TX:payments/verify:POST")
+    await prisma.$transaction([
+      prisma.payment.update({
         where: { id: paymentId },
         data: {
           status: "PAID",
           razorpayPaymentId,
           razorpaySignature,
         },
-      })
-
-      // Update order status
-      await tx.order.update({
+      }),
+      prisma.order.update({
         where: { id: order.id },
         data: {
           status: "CONFIRMED",
         },
-      })
-
-      // Update ledger entries status to PROCESSING
-      await tx.ledgerEntry.updateMany({
+      }),
+      prisma.ledgerEntry.updateMany({
         where: {
           orderId: order.id,
           status: "PENDING",
         },
         data: { status: "PROCESSING" },
-      })
-    })
+      }),
+    ])
+    console.timeEnd("TX:payments/verify:POST")
 
     return NextResponse.json({ success: true })
   } catch (error) {

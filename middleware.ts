@@ -1,27 +1,28 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 const isPublicRoute = createRouteMatcher([
   "/",
-  "/s(.*)",          // public storefront
-  "/sign-in(.*)",    // Clerk sign-in page
-  "/sign-up(.*)",    // Clerk sign-up page
-  "/api/webhooks(.*)" // keep webhooks public if you have them
-])
+  "/s(.*)",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/api/webhooks(.*)",
+]);
 
 export default clerkMiddleware(async (auth, req) => {
-  // Platform domain - use normal routing
   // Allow public routes without auth
-  if (isPublicRoute(req)) return
+  if (isPublicRoute(req)) {
+    return;
+  }
 
-  // Protect everything else (including /onboarding and /dashboard)
-  // Note: /onboarding requires auth but NOT merchant (handled in page)
-  auth().protect()
-})
+  // Protect all other routes (including /admin, /dashboard, /onboarding, and API routes)
+  auth().protect();
+});
 
 export const config = {
   matcher: [
-    // run middleware on all routes except next internals and static files
-    "/((?!_next|.*\\.(?:css|js|map|png|jpg|jpeg|gif|svg|ico|webp|ttf|woff|woff2)).*)",
+    // Skip Next.js internals and static files
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|woff|woff2|ttf|eot)).*)",
+    // Include API routes
     "/(api|trpc)(.*)",
   ],
 };

@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { DomainSettings } from "@/components/DomainSettings"
+import { getEffectiveFeeConfig } from "@/lib/pricing"
 
 export default async function SettingsPage() {
   // Require admin role - only admins can access settings
@@ -12,6 +13,8 @@ export default async function SettingsPage() {
   const storefront = await prisma.storefrontSettings.findUnique({
     where: { merchantId: merchant.id },
   })
+
+  const effectiveConfig = await getEffectiveFeeConfig(merchant.id)
 
   return (
     <div className="space-y-8">
@@ -88,6 +91,34 @@ export default async function SettingsPage() {
             <Button variant="outline" className="mt-4" disabled>
               Add Team Member (Coming Soon)
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Current Plan</CardTitle>
+            <CardDescription>Your active pricing package</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {effectiveConfig.packageName ? (
+              <>
+                <div>
+                  <p className="text-sm font-medium">{effectiveConfig.packageName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Fees: ₹{(effectiveConfig.fixedFeePaise / 100).toFixed(2)} +{" "}
+                    {effectiveConfig.variableFeeBps / 100}% per order
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Payout: {effectiveConfig.payoutFrequency}
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  To change your plan, please contact support.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No plan assigned</p>
+            )}
           </CardContent>
         </Card>
 

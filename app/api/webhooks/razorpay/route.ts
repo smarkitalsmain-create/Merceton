@@ -90,32 +90,32 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true }, { status: 200 })
       }
 
-      // Update payment and order
-      await prisma.$transaction(async (tx) => {
-        await tx.payment.update({
+      // Update payment and order - convert to batch transaction (independent operations)
+      console.time("TX:webhooks/razorpay:payment.captured")
+      await prisma.$transaction([
+        prisma.payment.update({
           where: { id: dbPayment.id },
           data: {
             status: "PAID",
             razorpayPaymentId: payment.id,
             razorpaySignature: payment.notes?.signature || null,
           },
-        })
-
-        await tx.order.update({
+        }),
+        prisma.order.update({
           where: { id: dbPayment.orderId },
           data: {
             status: "CONFIRMED",
           },
-        })
-
-        await tx.ledgerEntry.updateMany({
+        }),
+        prisma.ledgerEntry.updateMany({
           where: {
             orderId: dbPayment.orderId,
             status: "PENDING",
           },
           data: { status: "PROCESSING" },
-        })
-      })
+        }),
+      ])
+      console.timeEnd("TX:webhooks/razorpay:payment.captured")
 
       return NextResponse.json({ received: true }, { status: 200 })
     }

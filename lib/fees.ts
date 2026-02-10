@@ -83,8 +83,10 @@ export function calculateNetPayable(
 }
 
 /**
- * Get fee configuration from merchant
+ * Get fee configuration from merchant (legacy - for backward compatibility)
  * Returns null values if merchant uses platform defaults
+ * 
+ * @deprecated Use getEffectiveFeeConfig from @/lib/pricing instead
  */
 export function getFeeConfig(merchant: {
   feePercentageBps: number | null
@@ -96,4 +98,14 @@ export function getFeeConfig(merchant: {
     flatPaise: merchant.feeFlatPaise,
     maxCapPaise: merchant.feeMaxCapPaise,
   }
+}
+
+/**
+ * Get effective fee config for a merchant (new pricing package system)
+ * This is the recommended way to get fee configuration
+ */
+export async function getEffectiveFeeConfigForFees(merchantId: string): Promise<FeeConfig> {
+  const { getEffectiveFeeConfig, effectiveFeeConfigToLegacy } = await import("@/lib/pricing")
+  const effective = await getEffectiveFeeConfig(merchantId)
+  return effectiveFeeConfigToLegacy(effective)
 }

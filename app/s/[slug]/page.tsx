@@ -1,16 +1,84 @@
+export const runtime = "nodejs"
+
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import Image from "next/image"
+import { z } from "zod"
 import { StorefrontHeader } from "@/components/StorefrontHeader"
 import { CustomCodeStorefront } from "@/components/CustomCodeStorefront"
+import { HeroSection } from "@/components/storefront/sections/HeroSection"
+import { TextSection } from "@/components/storefront/sections/TextSection"
+import { ProductGridSection } from "@/components/storefront/sections/ProductGridSection"
+import { BannerSection } from "@/components/storefront/sections/BannerSection"
+import { FooterSection } from "@/components/storefront/sections/FooterSection"
+
+const SectionSchema = z.discriminatedUnion("type", [
+  z.object({
+    id: z.string(),
+    type: z.literal("hero"),
+    settings: z.object({
+      headline: z.string(),
+      subheadline: z.string().optional(),
+      ctaText: z.string().optional(),
+      ctaLink: z.string().optional(),
+    }),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("text"),
+    settings: z.object({
+      title: z.string(),
+      body: z.string(),
+    }),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("productGrid"),
+    settings: z.object({
+      title: z.string(),
+      collection: z.enum(["all", "featured"]),
+      limit: z.number().int().min(1).max(48),
+    }),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("banner"),
+    settings: z.object({
+      text: z.string(),
+      link: z.string().optional(),
+    }),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("footer"),
+    settings: z.object({
+      brandName: z.string(),
+      links: z
+        .array(
+          z.object({
+            label: z.string(),
+            href: z.string(),
+          })
+        )
+        .optional()
+        .default([]),
+    }),
+  }),
+])
+
+const LayoutSchema = z.object({
+  sections: z.array(SectionSchema),
+})
 
 export default async function StorePage({
   params,
+  searchParams,
 }: {
   params: { slug: string }
+  searchParams?: { [key: string]: string | string[] | undefined }
 }) {
   // Fetch merchant - read-only, no auth
   const merchant = await prisma.merchant.findUnique({
@@ -27,7 +95,19 @@ export default async function StorePage({
     notFound()
   }
 
-  // Fetch storefront settings separately - read-only, no upsert
+  const isPreview = searchParams?.preview === "true"
+
+  // Try section-based storefront page first
+  const page = await prisma.storefrontPage.findUnique({
+    where: {
+      merchantId_slug: {
+        merchantId: merchant.id,
+        slug: "home",
+      },
+    },
+  })
+
+  // Fetch storefront settings separately - read-only, no upsert (legacy theme/custom code)
   const storefront = await prisma.storefrontSettings.findUnique({
     where: { merchantId: merchant.id },
     select: {
@@ -57,6 +137,77 @@ export default async function StorePage({
     orderBy: { createdAt: "desc" },
   })
 
+  // If we have a section-based page and it's either published or in preview, render it
+  if (page && (isPreview || page.isPublished)) {
+    const parsed = LayoutSchema.safeParse(page.layoutJson)
+
+    const sections = parsed.success ? parsed.data.sections : []
+
+    return (
+      <div className="min-h-screen bg-background">
+        <StorefrontHeader
+          storeSlug={merchant.slug}
+          storeName={merchant.displayName}
+          logoUrl={storefront?.logoUrl || null}
+        />
+        <main>
+          {sections.map((section) => {
+            switch (section.type) {
+              case "hero":
+                return (
+                  <HeroSection
+                    key={section.id}
+                    headline={section.settings.headline}
+                    subheadline={section.settings.subheadline}
+                    ctaText={section.settings.ctaText}
+                    ctaLink={section.settings.ctaLink}
+                  />
+                )
+              case "text":
+                return (
+                  <TextSection
+                    key={section.id}
+                    title={section.settings.title}
+                    body={section.settings.body}
+                  />
+                )
+              case "productGrid": {
+                const limitedProducts = products.slice(0, section.settings.limit)
+                if (limitedProducts.length === 0) return null
+                return (
+                  <ProductGridSection
+                    key={section.id}
+                    title={section.settings.title}
+                    products={limitedProducts}
+                  />
+                )
+              }
+              case "banner":
+                return (
+                  <BannerSection
+                    key={section.id}
+                    text={section.settings.text}
+                    link={section.settings.link}
+                  />
+                )
+              case "footer":
+                return (
+                  <FooterSection
+                    key={section.id}
+                    brandName={section.settings.brandName}
+                    links={section.settings.links}
+                  />
+                )
+              default:
+                return null
+            }
+          })}
+        </main>
+      </div>
+    )
+  }
+
+  // Fallback: legacy storefront settings (theme/custom code)
   // Check if storefront is published
   if (!storefront || storefront.publishedAt === null) {
     return (

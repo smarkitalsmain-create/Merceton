@@ -38,11 +38,13 @@ model Merchant {
   // Relations
   users         User[]
   storefront    StorefrontSettings?
+  pages         StorefrontPage[]
   products      Product[]
   orders        Order[]
   payments      Payment[]
   ledgerEntries LedgerEntry[]
   payoutBatches PayoutBatch[]
+  feeConfig     MerchantFeeConfig?
 
   @@index([slug])
   @@index([isActive])
@@ -121,6 +123,28 @@ enum StorefrontMode {
   THEME
   BUILDER
   CUSTOM_CODE
+}
+
+// ============================================================================
+// STOREFRONT PAGES (SECTION-BASED BUILDER)
+// ============================================================================
+
+model StorefrontPage {
+  id         String   @id @default(cuid())
+  merchantId String
+  slug       String   @default("home")
+  title      String
+  layoutJson Json
+  isPublished Boolean  @default(true)
+  publishedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, slug])
+  @@index([merchantId])
+  @@map("storefront_pages")
 }
 
 // ============================================================================
@@ -346,4 +370,150 @@ enum PayoutStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+// ============================================================================
+// PRICING PACKAGES
+// ============================================================================
+
+model PricingPackage {
+  id               String                @id @default(cuid())
+  name             String
+  description      String?
+  status           PricingPackageStatus  @default(DRAFT) // DRAFT, PUBLISHED, ARCHIVED
+  fixedFeePaise    Int                   // per successful order fixed fee
+  variableFeeBps   Int                   // per successful order % fee in bps
+  domainPricePaise Int                   @default(9900) // ₹99 default
+  domainAllowed    Boolean               @default(true) // merchant can buy domain add-on
+  domainIncluded   Boolean               @default(false) // if true, domain is included in plan
+  payoutFrequency  PayoutFrequency       @default(WEEKLY)
+  holdbackBps      Int                   @default(0)
+  isPayoutHold     Boolean               @default(false)
+  isActive         Boolean               @default(true)
+  visibility       PackageVisibility     @default(PUBLIC)
+  deletedAt        DateTime?             // soft delete
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  merchantFeeConfigs MerchantFeeConfig[]
+  auditLogs         AdminAuditLog[]
+  platformSettings  PlatformSettings[]
+
+  @@index([status])
+  @@index([isActive])
+  @@index([visibility])
+  @@index([deletedAt])
+  @@map("pricing_packages")
+}
+
+enum PricingPackageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PayoutFrequency {
+  WEEKLY
+  DAILY
+  MANUAL
+}
+
+enum PackageVisibility {
+  PUBLIC
+  INTERNAL
+}
+
+// ============================================================================
+// MERCHANT FEE CONFIGURATION
+// ============================================================================
+
+model MerchantFeeConfig {
+  id                        String   @id @default(cuid())
+  merchantId                String   @unique
+  pricingPackageId          String?
+  
+  // Admin-only overrides
+  fixedFeeOverridePaise     Int?
+  variableFeeOverrideBps    Int?
+  payoutFrequencyOverride   PayoutFrequency?
+  holdbackOverrideBps       Int?
+  isPayoutHoldOverride      Boolean?
+  
+  // Domain subscription
+  domainSubscriptionActive     Boolean @default(false)
+  domainIncludedApplied        Boolean? // record if domainIncluded was applied
+  
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  pricingPackage PricingPackage? @relation(fields: [pricingPackageId], references: [id], onDelete: SetNull)
+
+  @@index([merchantId])
+  @@index([pricingPackageId])
+  @@map("merchant_fee_configs")
+}
+
+// ============================================================================
+// ADMIN AUDIT LOG
+// ============================================================================
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String   // Clerk userId (renamed from adminUserId)
+  actorEmail  String?  // Optional email
+  actionType  String   // AuditAction enum value or custom string
+  entityType  String   // "PricingPackage", "MerchantFeeConfig", "Merchant", etc.
+  entityId    String?
+  reason      String   // mandatory reason
+  beforeJson  Json?    // snapshot before change
+  afterJson   Json?     // snapshot after change
+  ip          String?  // Optional IP address
+  userAgent   String?  // Optional user agent
+  metadata    Json?    // Optional metadata for debugging/context
+  createdAt   DateTime @default(now())
+
+  pricingPackage PricingPackage? @relation(fields: [pricingPackageId], references: [id], onDelete: SetNull)
+  pricingPackageId String?
+
+  @@index([actorUserId])
+  @@index([actionType])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
+enum AuditAction {
+  PRICING_PACKAGE_CREATE
+  PRICING_PACKAGE_UPDATE
+  PRICING_PACKAGE_PUBLISH
+  PRICING_PACKAGE_ARCHIVE
+  PRICING_PACKAGE_TOGGLE_ACTIVE
+  PRICING_PACKAGE_DELETE
+  MERCHANT_PACKAGE_ASSIGN
+  MERCHANT_PACKAGE_UPDATE_OVERRIDES
+  MERCHANT_DOMAIN_SUBSCRIPTION_TOGGLE
+  MERCHANT_ACTIVATE
+  MERCHANT_DEACTIVATE
+  MERCHANT_HOLDBACK_SET
+  MERCHANT_PAYOUT_HOLD_SET
+  PLATFORM_SETTINGS_UPDATE
+}
+
+// ============================================================================
+// PLATFORM SETTINGS (SINGLETON)
+// ============================================================================
+
+model PlatformSettings {
+  id                      String   @id @default("singleton")
+  defaultFeePercentageBps Int?     @default(200) // 2% default (legacy)
+  defaultFeeFlatPaise     Int?     @default(500) // ₹5 default (legacy)
+  defaultFeeMaxCapPaise   Int?     @default(2500) // ₹25 default (legacy)
+  defaultPricingPackageId String?  // default package for new merchants
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  defaultPricingPackage PricingPackage? @relation(fields: [defaultPricingPackageId], references: [id], onDelete: SetNull)
+
+  @@map("platform_settings")
 }

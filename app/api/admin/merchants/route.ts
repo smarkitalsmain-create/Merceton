@@ -1,7 +1,7 @@
 export const runtime = "nodejs"
 
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/admin"
+import { requirePlatformAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma"
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requirePlatformAdmin()
 
     const merchantsRaw = await prisma.merchant.findMany({
       include: {
