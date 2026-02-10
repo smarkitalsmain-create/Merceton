@@ -8,7 +8,16 @@ import { getEffectiveFeeConfig } from "@/lib/pricing"
 
 export default async function SettingsPage() {
   // Require admin role - only admins can access settings
-  const { merchant, user } = await requireAdmin()
+  const { merchant: merchantBase } = await requireAdmin()
+
+  // Fetch merchant with all fields needed for settings
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: merchantBase.id },
+  })
+
+  if (!merchant) {
+    throw new Error("Merchant not found")
+  }
 
   const storefront = await prisma.storefrontSettings.findUnique({
     where: { merchantId: merchant.id },
@@ -76,26 +85,6 @@ export default async function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>User Management</CardTitle>
-            <CardDescription>Manage team members</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">{user.email}</p>
-                  <p className="text-xs text-muted-foreground">{user.role}</p>
-                </div>
-              </div>
-            </div>
-            <Button variant="outline" className="mt-4" disabled>
-              Add Team Member (Coming Soon)
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
             <CardTitle>Current Plan</CardTitle>
             <CardDescription>Your active pricing package</CardDescription>
           </CardHeader>
@@ -119,18 +108,6 @@ export default async function SettingsPage() {
             ) : (
               <p className="text-sm text-muted-foreground">No plan assigned</p>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Account</CardTitle>
-            <CardDescription>Account settings and preferences</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" disabled>
-              Account Settings (Coming Soon)
-            </Button>
           </CardContent>
         </Card>
 
@@ -165,9 +142,9 @@ export default async function SettingsPage() {
 
       <DomainSettings
         merchant={{
-          customDomain: merchant.customDomain,
-          domainStatus: merchant.domainStatus,
-          domainVerificationToken: merchant.domainVerificationToken,
+          customDomain: (merchant as any).customDomain,
+          domainStatus: (merchant as any).domainStatus,
+          domainVerificationToken: (merchant as any).domainVerificationToken,
         }}
       />
     </div>
