@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { ClientDate } from "@/components/ClientDate"
 
 interface MerchantAuditTabProps {
   merchantId: string
@@ -45,7 +46,9 @@ export function MerchantAuditTab({ merchantId }: MerchantAuditTabProps) {
               </TableCell>
               <TableCell>{log.actorEmail || "Unknown"}</TableCell>
               <TableCell className="max-w-md truncate">{log.reason}</TableCell>
-              <TableCell>{new Date(log.createdAt).toLocaleString()}</TableCell>
+              <TableCell>
+                <ClientDate value={log.createdAt} />
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

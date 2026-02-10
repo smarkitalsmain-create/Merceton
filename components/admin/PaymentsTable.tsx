@@ -3,6 +3,8 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import { formatMoney } from "@/lib/formatMoney"
+import { ClientDate } from "@/components/ClientDate"
 
 interface Payment {
   id: string
@@ -69,7 +71,7 @@ export function PaymentsTable({ payments }: PaymentsTableProps) {
                   {payment.status}
                 </Badge>
               </TableCell>
-              <TableCell className="font-medium">₹{payment.amount.toFixed(2)}</TableCell>
+              <TableCell className="font-medium">₹{formatMoney(payment.amount)}</TableCell>
               <TableCell className="text-xs">
                 {payment.razorpayOrderId && (
                   <div>
@@ -80,7 +82,9 @@ export function PaymentsTable({ payments }: PaymentsTableProps) {
                   </div>
                 )}
               </TableCell>
-              <TableCell>{new Date(payment.createdAt).toLocaleDateString()}</TableCell>
+              <TableCell>
+                <ClientDate value={payment.createdAt} />
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

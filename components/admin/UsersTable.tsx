@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { toggleUserStatus, reassignUserToMerchant } from "@/app/actions/admin"
 import { CheckCircle2, XCircle, UserPlus } from "lucide-react"
+import { ClientDate } from "@/components/ClientDate"
 
 interface User {
   id: string
@@ -116,7 +117,9 @@ export function UsersTable({ users }: UsersTableProps) {
                   {user.isActive ? "Active" : "Inactive"}
                 </Badge>
               </TableCell>
-              <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
+              <TableCell>
+                <ClientDate value={user.createdAt} />
+              </TableCell>
               <TableCell>
                 <div className="flex gap-2">
                   <Button

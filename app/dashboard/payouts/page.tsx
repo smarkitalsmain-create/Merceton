@@ -1,8 +1,9 @@
 import { requireMerchant } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { formatCurrency } from "@/lib/utils/currency"
+import { formatMoney } from "@/lib/formatMoney"
 import { getEffectiveFeeConfig } from "@/lib/pricing"
+import { ClientDate } from "@/components/ClientDate"
 
 export default async function PayoutsPage() {
   const merchant = await requireMerchant()
@@ -94,7 +95,7 @@ export default async function PayoutsPage() {
             <CardDescription>All orders (paid + pending)</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{totals.totalGross.toFixed(2)}</div>
+            <div className="text-2xl font-bold">₹{formatMoney(totals.totalGross)}</div>
           </CardContent>
         </Card>
 
@@ -104,7 +105,7 @@ export default async function PayoutsPage() {
             <CardDescription>Platform fees deducted</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">₹{totals.totalFees.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-red-600">₹{formatMoney(totals.totalFees)}</div>
           </CardContent>
         </Card>
 
@@ -114,7 +115,7 @@ export default async function PayoutsPage() {
             <CardDescription>Total amount payable to you</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">₹{totals.totalNet.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-green-600">₹{formatMoney(totals.totalNet)}</div>
           </CardContent>
         </Card>
       </div>
@@ -129,15 +130,15 @@ export default async function PayoutsPage() {
           <div className="grid gap-4 md:grid-cols-3">
             <div>
               <p className="text-sm text-muted-foreground">Gross (Paid)</p>
-              <p className="text-xl font-bold">₹{paidTotals.totalGross.toFixed(2)}</p>
+              <p className="text-xl font-bold">₹{formatMoney(paidTotals.totalGross)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Fees (Paid)</p>
-              <p className="text-xl font-bold text-red-600">₹{paidTotals.totalFees.toFixed(2)}</p>
+              <p className="text-xl font-bold text-red-600">₹{formatMoney(paidTotals.totalFees)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Net Receivable (Paid)</p>
-              <p className="text-xl font-bold text-green-600">₹{paidTotals.totalNet.toFixed(2)}</p>
+              <p className="text-xl font-bold text-green-600">₹{formatMoney(paidTotals.totalNet)}</p>
             </div>
           </div>
         </CardContent>
@@ -168,7 +169,7 @@ export default async function PayoutsPage() {
                     </div>
                     <p className="text-sm text-muted-foreground">{entry.description}</p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleString()}
+                      <ClientDate value={entry.createdAt} />
                     </p>
                   </div>
                   <div className="text-right">
@@ -178,7 +179,7 @@ export default async function PayoutsPage() {
                       }`}
                     >
                       {entry.amount >= 0 ? "+" : ""}
-                      ₹{entry.amount.toFixed(2)}
+                      ₹{formatMoney(entry.amount)}
                     </p>
                     <p className="text-xs text-muted-foreground">{entry.status}</p>
                   </div>
@@ -199,7 +200,7 @@ export default async function PayoutsPage() {
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Fixed Fee:</span>
               <span className="font-medium">
-                ₹{(effectiveConfig.fixedFeePaise / 100).toFixed(2)} per order
+                ₹{formatMoney(effectiveConfig.fixedFeePaise / 100)} per order
               </span>
             </div>
             <div className="flex justify-between">

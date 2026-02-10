@@ -10,6 +10,8 @@ import { activateMerchant, deactivateMerchant } from "@/app/actions/admin"
 import Link from "next/link"
 import { CheckCircle2, XCircle, Search } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { formatMoney } from "@/lib/formatMoney"
+import { ClientDate } from "@/components/ClientDate"
 
 interface Merchant {
   id: string
@@ -146,9 +148,11 @@ export function AdminMerchantsTable({ merchants }: AdminMerchantsTableProps) {
                 <TableCell className="text-sm">
                   <div>Orders: {merchant._count.orders}</div>
                   <div>Products: {merchant._count.products}</div>
-                  <div>GMV: ₹{merchant.gmv.toFixed(2)}</div>
+                  <div>GMV: ₹{formatMoney(merchant.gmv)}</div>
                 </TableCell>
-                <TableCell>{new Date(merchant.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell>
+                  <ClientDate value={merchant.createdAt} />
+                </TableCell>
                 <TableCell>
                   <div className="flex gap-2">
                     <Button

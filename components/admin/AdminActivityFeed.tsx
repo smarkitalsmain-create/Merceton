@@ -3,22 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-
-const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: true,
-  timeZone: "Asia/Kolkata",
-})
-
-function formatDateTime(value: Date): string {
-  // Ensure we always format using the same locale/timezone on server and client
-  return dateTimeFormatter.format(new Date(value))
-}
+import { ClientDate } from "@/components/ClientDate"
 
 interface AuditLog {
   id: string
@@ -55,7 +40,7 @@ export function AdminActivityFeed({ logs }: AdminActivityFeedProps) {
                 </p>
               </div>
               <p className="text-xs text-muted-foreground">
-                {formatDateTime(log.createdAt)}
+                <ClientDate value={log.createdAt} />
               </p>
             </div>
           ))}

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { ClientDate } from "@/components/ClientDate"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Save, Rocket, AlertTriangle } from "lucide-react"
 
@@ -396,7 +397,7 @@ export function StorefrontSettingsForm({ merchantId }: StorefrontSettingsFormPro
             <div className="flex items-center gap-2">
               <Badge variant="outline">Published</Badge>
               <span className="text-sm text-muted-foreground">
-                Last published: {new Date(settings.publishedAt).toLocaleString()}
+                Last published: <ClientDate value={settings.publishedAt} />
               </span>
             </div>
           )}

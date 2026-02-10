@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search } from "lucide-react"
+import { ClientDate } from "@/components/ClientDate"
 
 export default async function AuditLogsPage({
   searchParams,
@@ -132,7 +133,7 @@ export default async function AuditLogsPage({
                   logs.map((log) => (
                     <TableRow key={log.id}>
                       <TableCell className="text-sm">
-                        {new Date(log.createdAt).toLocaleString()}
+                        <ClientDate value={log.createdAt} />
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">

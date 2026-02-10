@@ -1,5 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { formatMoney } from "@/lib/formatMoney"
+import { ClientDate } from "@/components/ClientDate"
 
 interface MerchantOrdersTabProps {
   orders: Array<{
@@ -39,9 +41,9 @@ export function MerchantOrdersTab({ orders }: MerchantOrdersTabProps) {
               <TableCell>
                 <Badge variant="outline">{order.status}</Badge>
               </TableCell>
-              <TableCell>₹{order.grossAmount.toNumber().toFixed(2)}</TableCell>
-              <TableCell>₹{order.platformFee.toNumber().toFixed(2)}</TableCell>
-              <TableCell>₹{order.netPayable.toNumber().toFixed(2)}</TableCell>
+              <TableCell>₹{formatMoney(order.grossAmount.toNumber())}</TableCell>
+              <TableCell>₹{formatMoney(order.platformFee.toNumber())}</TableCell>
+              <TableCell>₹{formatMoney(order.netPayable.toNumber())}</TableCell>
               <TableCell>
                 {order.payment ? (
                   <Badge variant="outline">{order.payment.status}</Badge>
@@ -49,7 +51,9 @@ export function MerchantOrdersTab({ orders }: MerchantOrdersTabProps) {
                   <span className="text-muted-foreground">No payment</span>
                 )}
               </TableCell>
-              <TableCell>{new Date(order.createdAt).toLocaleString()}</TableCell>
+              <TableCell>
+                <ClientDate value={order.createdAt} />
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { authorizeRequest, ensureTenantAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { inrToPaise } from "@/lib/utils/currency"
+import { getMerchantOnboarding } from "@/lib/onboarding"
 import {
   createProductSchema,
   updateProductSchema,
@@ -19,11 +20,28 @@ export async function createProduct(data: CreateProductData) {
     // Authorize and get merchant
     const { merchant } = await authorizeRequest()
 
+    // Get merchant onboarding to check GST status
+    const onboarding = await getMerchantOnboarding(merchant.id)
+
     // Validate data
     const validated = createProductSchema.parse({
       ...data,
       merchantId: merchant.id, // Override with authenticated merchant
     })
+
+    // If merchant is GST registered, validate GST/HSN fields are provided
+    if (onboarding.gstStatus === "REGISTERED") {
+      if (!validated.hsnOrSac || validated.hsnOrSac.trim() === "") {
+        return { success: false, error: "HSN/SAC is required for GST registered merchants" }
+      }
+      if (validated.gstRate === undefined || validated.gstRate === null) {
+        return { success: false, error: "GST rate is required for GST registered merchants" }
+      }
+      // Validate GST rate is one of the allowed values
+      if (![0, 5, 12, 18, 28].includes(validated.gstRate)) {
+        return { success: false, error: "GST rate must be 0, 5, 12, 18, or 28" }
+      }
+    }
 
     // Convert price and MRP from INR to paise
     const priceInPaise = inrToPaise(validated.price)
@@ -40,6 +58,10 @@ export async function createProduct(data: CreateProductData) {
         sku: validated.sku || null,
         stock: validated.stock,
         isActive: true,
+        // GST & HSN fields
+        hsnOrSac: validated.hsnOrSac || null,
+        gstRate: validated.gstRate ?? null,
+        isTaxable: validated.isTaxable ?? true,
         images: validated.images
           ? {
               create: validated.images.map((img, idx) => ({
@@ -89,6 +111,21 @@ export async function updateProduct(data: UpdateProductData) {
     // Ensure tenant access
     ensureTenantAccess(existingProduct.merchantId, merchant.id)
 
+    // Get merchant onboarding to check GST status
+    const onboarding = await getMerchantOnboarding(merchant.id)
+
+    // If merchant is GST registered and GST fields are being updated, validate them
+    if (onboarding.gstStatus === "REGISTERED") {
+      if (validated.hsnOrSac !== undefined && (!validated.hsnOrSac || validated.hsnOrSac.trim() === "")) {
+        return { success: false, error: "HSN/SAC is required for GST registered merchants" }
+      }
+      if (validated.gstRate !== undefined && validated.gstRate !== null) {
+        if (![0, 5, 12, 18, 28].includes(validated.gstRate)) {
+          return { success: false, error: "GST rate must be 0, 5, 12, 18, or 28" }
+        }
+      }
+    }
+
     // Prepare update data
     const updateData: any = {}
     if (validated.name !== undefined) updateData.name = validated.name
@@ -100,6 +137,10 @@ export async function updateProduct(data: UpdateProductData) {
       updateData.mrp = validated.mrp ? inrToPaise(validated.mrp) : null
     if (validated.sku !== undefined) updateData.sku = validated.sku || null
     if (validated.stock !== undefined) updateData.stock = validated.stock
+    // GST & HSN fields
+    if (validated.hsnOrSac !== undefined) updateData.hsnOrSac = validated.hsnOrSac || null
+    if (validated.gstRate !== undefined) updateData.gstRate = validated.gstRate ?? null
+    if (validated.isTaxable !== undefined) updateData.isTaxable = validated.isTaxable
 
     // Update product
     const product = await prisma.product.update({

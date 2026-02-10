@@ -133,6 +133,34 @@ export default async function SettingsPage() {
             </Button>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Onboarding Details</CardTitle>
+            <CardDescription>View and update your PAN, GST, and business basics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/dashboard/settings/onboarding">
+              <Button variant="outline" className="w-full">
+                Manage Onboarding Details
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Bank Account</CardTitle>
+            <CardDescription>Configure the bank account for payouts</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/dashboard/settings/bank">
+              <Button variant="outline" className="w-full">
+                Configure Bank Account
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
 
       <DomainSettings

@@ -20,6 +20,10 @@ export const productFormSchema = z.object({
   sku: z.string().max(100, "SKU is too long").optional(),
   stock: z.number().int().min(0, "Stock cannot be negative"),
   images: z.array(productImageSchema).optional(),
+  // GST & HSN fields (optional in schema, but required if merchant is GST registered)
+  hsnOrSac: z.string().max(50, "HSN/SAC is too long").optional(),
+  gstRate: z.number().int().min(0).max(28).optional(), // GST rate as percentage (0, 5, 12, 18, 28)
+  isTaxable: z.boolean().default(true),
 })
 
 export type ProductFormData = z.infer<typeof productFormSchema>

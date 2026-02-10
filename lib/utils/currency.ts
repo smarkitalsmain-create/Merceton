@@ -26,7 +26,8 @@ export function paiseToInr(paise: number): number {
  * @returns Formatted string (e.g., "₹599.99")
  */
 export function formatCurrency(paise: number): string {
-  return `₹${paiseToInr(paise).toFixed(2)}`
+  const num = Number(paiseToInr(paise))
+  return `₹${Number.isFinite(num) ? num.toFixed(2) : "0.00"}`
 }
 
 /**
@@ -35,5 +36,6 @@ export function formatCurrency(paise: number): string {
  * @returns Formatted string (e.g., "599.99")
  */
 export function formatCurrencyValue(paise: number): string {
-  return paiseToInr(paise).toFixed(2)
+  const num = Number(paiseToInr(paise))
+  return Number.isFinite(num) ? num.toFixed(2) : "0.00"
 }

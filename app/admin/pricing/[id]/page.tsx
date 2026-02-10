@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Edit2, Copy, Send, Archive, CheckCircle2, XCircle, Star, ArrowLeft } from "lucide-react"
 import { PricingPackageActions } from "@/components/admin/PricingPackageActions"
+import { formatMoney } from "@/lib/formatMoney"
 
 export default async function PricingPackageDetailPage({
   params,
@@ -124,7 +125,9 @@ export default async function PricingPackageDetailPage({
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Fixed Fee</span>
-              <span className="font-medium">₹{(packageData.fixedFeePaise / 100).toFixed(2)}</span>
+              <span className="font-medium">
+                ₹{formatMoney(packageData.fixedFeePaise / 100)}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Variable Fee</span>
@@ -157,7 +160,9 @@ export default async function PricingPackageDetailPage({
             {packageData.domainAllowed && !packageData.domainIncluded && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Domain Price</span>
-                <span className="font-medium">₹{(packageData.domainPricePaise / 100).toFixed(2)}/mo</span>
+                <span className="font-medium">
+                  ₹{formatMoney(packageData.domainPricePaise / 100)}/mo
+                </span>
               </div>
             )}
           </CardContent>
@@ -203,10 +208,10 @@ export default async function PricingPackageDetailPage({
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="text-sm text-muted-foreground">
-              Created: {new Date(packageData.createdAt).toLocaleString()}
+              Created: {packageData.createdAt.toISOString()}
             </div>
             <div className="text-sm text-muted-foreground">
-              Updated: {new Date(packageData.updatedAt).toLocaleString()}
+              Updated: {packageData.updatedAt.toISOString()}
             </div>
           </CardContent>
         </Card>

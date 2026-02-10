@@ -3,6 +3,8 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import { formatMoney } from "@/lib/formatMoney"
+import { ClientDate } from "@/components/ClientDate"
 
 interface Order {
   id: string
@@ -52,10 +54,12 @@ export function OrdersTable({ orders }: OrdersTableProps) {
               <TableCell>
                 <Badge variant="outline">{order.status}</Badge>
               </TableCell>
-              <TableCell>₹{order.grossAmount.toFixed(2)}</TableCell>
-              <TableCell>₹{order.platformFee.toFixed(2)}</TableCell>
-              <TableCell className="font-medium">₹{order.netPayable.toFixed(2)}</TableCell>
-              <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
+              <TableCell>₹{formatMoney(order.grossAmount)}</TableCell>
+              <TableCell>₹{formatMoney(order.platformFee)}</TableCell>
+              <TableCell className="font-medium">₹{formatMoney(order.netPayable)}</TableCell>
+              <TableCell>
+                <ClientDate value={order.createdAt} />
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

@@ -4,6 +4,8 @@ import { requireSuperAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AdminActivityFeed } from "@/components/admin/AdminActivityFeed"
+import { formatMoney } from "@/lib/formatMoney"
+import { ClientDate } from "@/components/ClientDate"
 
 export default async function AdminPage() {
   await requireSuperAdmin()
@@ -88,11 +90,11 @@ export default async function AdminPage() {
     }),
   ])
 
-  const gmv7dNum = gmv7d._sum.grossAmount?.toNumber() || 0
-  const gmv30dNum = gmv30d._sum.grossAmount?.toNumber() || 0
-  const fees7dNum = fees7d._sum.platformFee?.toNumber() || 0
-  const fees30dNum = fees30d._sum.platformFee?.toNumber() || 0
-  const pendingPayoutsNum = pendingPayouts._sum.totalAmount?.toNumber() || 0
+  const gmv7dNum = gmv7d._sum.grossAmount?.toNumber() ?? 0
+  const gmv30dNum = gmv30d._sum.grossAmount?.toNumber() ?? 0
+  const fees7dNum = fees7d._sum.platformFee?.toNumber() ?? 0
+  const fees30dNum = fees30d._sum.platformFee?.toNumber() ?? 0
+  const pendingPayoutsNum = pendingPayouts._sum.totalAmount?.toNumber() ?? 0
 
   return (
     <div className="space-y-8">
@@ -104,7 +106,7 @@ export default async function AdminPage() {
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader>
+            <CardHeader>
             <CardTitle className="text-sm">Total Merchants</CardTitle>
             <CardDescription>All merchants</CardDescription>
           </CardHeader>
@@ -131,8 +133,8 @@ export default async function AdminPage() {
             <CardDescription>Gross Merchandise Value</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{gmv7dNum.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">₹{gmv30dNum.toFixed(2)} in last 30 days</p>
+            <div className="text-2xl font-bold">₹{formatMoney(gmv7dNum)}</div>
+            <p className="text-xs text-muted-foreground mt-1">₹{formatMoney(gmv30dNum)} in last 30 days</p>
           </CardContent>
         </Card>
 
@@ -142,20 +144,20 @@ export default async function AdminPage() {
             <CardDescription>Fees earned</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">₹{fees7dNum.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">₹{fees30dNum.toFixed(2)} in last 30 days</p>
+            <div className="text-2xl font-bold text-green-600">₹{formatMoney(fees7dNum)}</div>
+            <p className="text-xs text-muted-foreground mt-1">₹{formatMoney(fees30dNum)} in last 30 days</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader>
+            <CardHeader>
             <CardTitle className="text-sm">Pending Payouts</CardTitle>
             <CardDescription>Total pending payout amount</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{pendingPayoutsNum.toFixed(2)}</div>
+            <div className="text-2xl font-bold">₹{formatMoney(pendingPayoutsNum)}</div>
           </CardContent>
         </Card>
       </div>
@@ -176,7 +178,7 @@ export default async function AdminPage() {
                     <p className="text-xs text-muted-foreground">/{merchant.slug}</p>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(merchant.createdAt).toLocaleDateString()}
+                    <ClientDate value={merchant.createdAt} />
                   </p>
                 </div>
               ))}
@@ -198,7 +200,7 @@ export default async function AdminPage() {
                     <p className="text-xs text-muted-foreground">{order.merchant.displayName}</p>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    ₹{order.grossAmount.toNumber().toFixed(2)}
+                    ₹{formatMoney(order.grossAmount.toNumber())}
                   </p>
                 </div>
               ))}

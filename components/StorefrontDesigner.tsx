@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { ClientDate } from "@/components/ClientDate"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Palette, Code, Upload, X } from "lucide-react"
 import { uploadToCloudinary } from "@/lib/cloudinary"
@@ -247,7 +248,7 @@ export function StorefrontDesigner({
             </Badge>
             {storefront.publishedAt && (
               <span className="text-xs text-muted-foreground">
-                Last published: {new Date(storefront.publishedAt).toLocaleString()}
+                Last published: <ClientDate value={storefront.publishedAt} />
               </span>
             )}
           </div>

@@ -25,7 +25,11 @@ interface ImageState {
   uploadId?: string
 }
 
-export function NewProductForm() {
+interface NewProductFormProps {
+  isGstRegistered: boolean
+}
+
+export function NewProductForm({ isGstRegistered }: NewProductFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [isPending, startTransition] = useTransition()
@@ -89,7 +93,10 @@ export function NewProductForm() {
           console.error("Upload error:", error)
           toast({
             title: "Upload failed",
-            description: `Failed to upload ${file.name}`,
+            description:
+              error instanceof Error
+                ? error.message
+                : `Failed to upload ${file.name}`,
             variant: "destructive",
           })
           // Remove failed upload
@@ -262,6 +269,71 @@ export function NewProductForm() {
           </div>
         </CardContent>
       </Card>
+
+      {/* GST & HSN Section - Only show if merchant is GST registered */}
+      {isGstRegistered && (
+        <Card>
+          <CardHeader>
+            <CardTitle>GST & HSN Details</CardTitle>
+            <CardDescription>
+              <span className="inline-flex items-center gap-2">
+                <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                  GST Registered: Required
+                </span>
+              </span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="hsnOrSac">HSN/SAC Code *</Label>
+              <Input
+                id="hsnOrSac"
+                {...register("hsnOrSac")}
+                placeholder="e.g., 6109, 8517, etc."
+                maxLength={50}
+              />
+              {errors.hsnOrSac && (
+                <p className="text-sm text-destructive">{errors.hsnOrSac.message}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Enter the HSN (Harmonized System of Nomenclature) or SAC (Service Accounting Code) for this product
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="gstRate">GST Rate (%) *</Label>
+              <select
+                id="gstRate"
+                {...register("gstRate", { valueAsNumber: true })}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Select GST rate</option>
+                <option value="0">0% (Exempt)</option>
+                <option value="5">5%</option>
+                <option value="12">12%</option>
+                <option value="18">18%</option>
+                <option value="28">28%</option>
+              </select>
+              {errors.gstRate && (
+                <p className="text-sm text-destructive">{errors.gstRate.message}</p>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="isTaxable"
+                {...register("isTaxable")}
+                defaultChecked={true}
+                className="rounded"
+              />
+              <Label htmlFor="isTaxable" className="font-normal">
+                Product is taxable
+              </Label>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

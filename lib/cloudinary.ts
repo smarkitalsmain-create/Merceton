@@ -13,24 +13,26 @@ export async function uploadToCloudinary(
     })
   } catch (error) {
     console.error("Cloudinary sign request failed:", error)
-    throw new Error("Failed to contact Cloudinary sign endpoint")
+    throw new Error(`Sign request failed: ${String(error)}`)
   }
 
   if (!signResponse.ok) {
-    let message = "Failed to get Cloudinary signature"
+    let text = ""
     try {
-      const data = await signResponse.json()
-      if (data?.error) {
-        message = data.error
-      }
+      text = await signResponse.text()
     } catch {
-      // ignore JSON parse errors
+      text = "<non-text response>"
     }
-    console.error("Cloudinary sign error response:", signResponse.status, message)
-    throw new Error(message)
+    console.error(
+      "Cloudinary sign error response:",
+      signResponse.status,
+      text
+    )
+    throw new Error(`Sign failed (${signResponse.status}): ${text}`)
   }
 
-  const { timestamp, signature, apiKey, cloudName, folder } = await signResponse.json()
+  const { timestamp, signature, apiKey, cloudName, folder } =
+    await signResponse.json()
 
   // Step 2: Upload to Cloudinary with signed parameters
   const formData = new FormData()
@@ -40,41 +42,46 @@ export async function uploadToCloudinary(
   formData.append("folder", folder)
   formData.append("signature", signature)
 
-  const xhr = new XMLHttpRequest()
-
-  return new Promise((resolve, reject) => {
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable && onProgress) {
-        const progress = (e.loaded / e.total) * 100
-        onProgress(progress)
+  let uploadResponse: Response
+  try {
+    uploadResponse = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+      {
+        method: "POST",
+        body: formData,
       }
-    })
+    )
+  } catch (error) {
+    console.error("Cloudinary upload network error:", error)
+    throw new Error(`Cloudinary upload failed: ${String(error)}`)
+  }
 
-    xhr.addEventListener("load", () => {
-      if (xhr.status === 200) {
-        try {
-          const response = JSON.parse(xhr.responseText)
-          resolve({
-            url: response.secure_url,
-            publicId: response.public_id,
-          })
-        } catch (error) {
-          console.error("Cloudinary response parse error:", error)
-          reject(new Error("Failed to parse Cloudinary response"))
-        }
-      } else {
-        console.error("Cloudinary upload failed:", xhr.status, xhr.responseText)
-        reject(new Error(`Upload failed: ${xhr.statusText || xhr.status}`))
-      }
-    })
+  if (!uploadResponse.ok) {
+    let text = ""
+    try {
+      text = await uploadResponse.text()
+    } catch {
+      text = "<non-text response>"
+    }
+    console.error(
+      "Cloudinary upload failed:",
+      uploadResponse.status,
+      text
+    )
+    throw new Error(
+      `Cloudinary upload failed (${uploadResponse.status}): ${text}`
+    )
+  }
 
-    xhr.addEventListener("error", () => {
-      console.error("Cloudinary upload network error")
-      reject(new Error("Upload failed"))
-    })
-
-    xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`)
-    xhr.send(formData)
-  })
+  try {
+    const response = await uploadResponse.json()
+    return {
+      url: response.secure_url,
+      publicId: response.public_id,
+    }
+  } catch (error) {
+    console.error("Cloudinary response parse error:", error)
+    throw new Error("Failed to parse Cloudinary response")
+  }
 }
 

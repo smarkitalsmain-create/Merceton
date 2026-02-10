@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { StorefrontHeader } from "@/components/StorefrontHeader"
 import { CheckCircle } from "lucide-react"
 import Link from "next/link"
+import { formatMoney } from "@/lib/formatMoney"
 
 export default async function OrderConfirmationPage({
   params,
@@ -82,13 +83,7 @@ export default async function OrderConfirmationPage({
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Order Date</p>
-                  <p className="font-semibold">
-                    {new Date(order.createdAt).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </p>
+                  <p className="font-semibold">{order.createdAt.toISOString().slice(0, 10)}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Status</p>
@@ -113,17 +108,17 @@ export default async function OrderConfirmationPage({
                     <div>
                       <p className="font-medium">{item.product.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        Quantity: {item.quantity} × ₹{(item.price / 100).toFixed(2)}
+                        Quantity: {item.quantity} × ₹{formatMoney(item.price / 100)}
                       </p>
                     </div>
                     <p className="font-semibold">
-                      ₹{((item.price * item.quantity) / 100).toFixed(2)}
+                      ₹{formatMoney((item.price * item.quantity) / 100)}
                     </p>
                   </div>
                 ))}
                 <div className="border-t pt-4 flex justify-between text-lg font-bold">
                   <span>Total</span>
-                  <span>₹{(totalAmount / 100).toFixed(2)}</span>
+                  <span>₹{formatMoney(totalAmount / 100)}</span>
                 </div>
               </div>
             </CardContent>
@@ -150,7 +145,7 @@ export default async function OrderConfirmationPage({
             </Button>
             {order.payment?.paymentMethod === "COD" && (
               <p className="text-sm text-muted-foreground flex items-center">
-                You will pay ₹{(totalAmount / 100).toFixed(2)} when you receive your order.
+                You will pay ₹{formatMoney(totalAmount / 100)} when you receive your order.
               </p>
             )}
           </div>

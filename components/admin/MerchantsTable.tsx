@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { toggleMerchantStatus, resetDomainStatus, updateMerchantFeeConfig } from "@/app/actions/admin"
 import { RefreshCw, CheckCircle2, XCircle } from "lucide-react"
+import { formatMoney } from "@/lib/formatMoney"
+import { ClientDate } from "@/components/ClientDate"
 
 interface Merchant {
   id: string
@@ -114,10 +116,13 @@ export function MerchantsTable({ merchants }: MerchantsTableProps) {
               </TableCell>
               <TableCell className="text-xs">
                 {merchant.feePercentageBps ? `${merchant.feePercentageBps / 100}%` : "Default"}{" "}
-                {merchant.feeFlatPaise && `+ ₹${(merchant.feeFlatPaise / 100).toFixed(2)}`}
-                {merchant.feeMaxCapPaise && ` (max ₹${(merchant.feeMaxCapPaise / 100).toFixed(2)})`}
+                {merchant.feeFlatPaise && `+ ₹${formatMoney(merchant.feeFlatPaise / 100)}`}
+                {merchant.feeMaxCapPaise &&
+                  ` (max ₹${formatMoney(merchant.feeMaxCapPaise / 100)})`}
               </TableCell>
-              <TableCell>{new Date(merchant.createdAt).toLocaleDateString()}</TableCell>
+              <TableCell>
+                <ClientDate value={merchant.createdAt} />
+              </TableCell>
               <TableCell>
                 <div className="flex gap-2">
                   <Button

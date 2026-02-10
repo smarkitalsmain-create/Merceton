@@ -1,35 +1,42 @@
 export const runtime = "nodejs"
 
-import { NextRequest, NextResponse } from "next/server"
-import { requireMerchant } from "@/lib/auth"
+import { NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 import crypto from "crypto"
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const merchant = await requireMerchant()
+    const { userId } = auth()
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
     const apiSecret = process.env.CLOUDINARY_API_SECRET
     const apiKey = process.env.CLOUDINARY_API_KEY
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME
 
-    if (!apiSecret || !apiKey || !cloudName) {
-      console.error("Cloudinary configuration missing")
+    const missingEnv: string[] = []
+    if (!cloudName) missingEnv.push("CLOUDINARY_CLOUD_NAME")
+    if (!apiKey) missingEnv.push("CLOUDINARY_API_KEY")
+    if (!apiSecret) missingEnv.push("CLOUDINARY_API_SECRET")
+
+    if (missingEnv.length > 0) {
+      console.error(
+        `Cloudinary configuration missing env vars: ${missingEnv.join(", ")}`
+      )
       return NextResponse.json(
-        { error: "Cloudinary configuration missing" },
+        { error: "Missing CLOUDINARY env vars" },
         { status: 500 }
       )
     }
 
     const timestamp = Math.round(Date.now() / 1000)
-    const folder = `sellarity/merchant-${merchant.id}`
+    const folder = "sellarity/products"
 
-    // Cloudinary signed params: folder=<folder>&timestamp=<timestamp>
-    const stringToSign = `folder=${folder}&timestamp=${timestamp}`
-
-    const signature = crypto
-      .createHmac("sha1", apiSecret)
-      .update(stringToSign)
-      .digest("hex")
+    // Cloudinary signed params: folder=sellarity/products&timestamp=<ts><apiSecret>
+    const stringToSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`
+    const signature = crypto.createHash("sha1").update(stringToSign).digest("hex")
 
     return NextResponse.json({
       cloudName,

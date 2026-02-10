@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { markDomainVerified, regenerateDomainToken } from "@/app/actions/admin"
 import { CheckCircle2, RefreshCw } from "lucide-react"
+import { ClientDate } from "@/components/ClientDate"
 
 interface Merchant {
   id: string
@@ -117,9 +118,11 @@ export function DomainsTable({ merchants }: DomainsTableProps) {
                 )}
               </TableCell>
               <TableCell>
-                {merchant.domainVerifiedAt
-                  ? new Date(merchant.domainVerifiedAt).toLocaleDateString()
-                  : "-"}
+                {merchant.domainVerifiedAt ? (
+                  <ClientDate value={merchant.domainVerifiedAt} />
+                ) : (
+                  "-"
+                )}
               </TableCell>
               <TableCell>
                 <div className="flex gap-2">

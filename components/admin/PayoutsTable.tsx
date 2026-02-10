@@ -3,6 +3,8 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import { formatMoney } from "@/lib/formatMoney"
+import { ClientDate } from "@/components/ClientDate"
 
 interface Payout {
   id: string
@@ -48,7 +50,7 @@ export function PayoutsTable({ payouts }: PayoutsTableProps) {
                   {payout.merchant.displayName}
                 </Link>
               </TableCell>
-              <TableCell className="font-medium">₹{payout.totalAmount.toFixed(2)}</TableCell>
+              <TableCell className="font-medium">₹{formatMoney(payout.totalAmount)}</TableCell>
               <TableCell>
                 <Badge
                   variant={
@@ -73,9 +75,11 @@ export function PayoutsTable({ payouts }: PayoutsTableProps) {
                 )}
               </TableCell>
               <TableCell>
-                {payout.processedAt ? new Date(payout.processedAt).toLocaleDateString() : "-"}
+                {payout.processedAt ? <ClientDate value={payout.processedAt} /> : "-"}
               </TableCell>
-              <TableCell>{new Date(payout.createdAt).toLocaleDateString()}</TableCell>
+              <TableCell>
+                <ClientDate value={payout.createdAt} />
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

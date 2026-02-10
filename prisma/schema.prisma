@@ -45,6 +45,8 @@ model Merchant {
   ledgerEntries LedgerEntry[]
   payoutBatches PayoutBatch[]
   feeConfig     MerchantFeeConfig?
+  bankAccount   MerchantBankAccount?
+  onboarding    MerchantOnboarding?
 
   @@index([slug])
   @@index([isActive])
@@ -161,6 +163,12 @@ model Product {
   sku         String?
   stock       Int      @default(0)
   isActive    Boolean  @default(true)
+  
+  // GST & HSN fields (required if merchant is GST registered)
+  hsnOrSac    String?
+  gstRate     Int?     // GST rate as percentage (0, 5, 12, 18, 28)
+  isTaxable   Boolean  @default(true)
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -202,8 +210,22 @@ model Order {
   customerEmail   String
   customerPhone   String?
   customerAddress String
-  status          OrderStatus @default(PENDING)
 
+  /// Shipping and lifecycle
+  shippingAddress  Json?
+  stage            OrderStage      @default(NEW)
+  status           OrderStatus     @default(PENDING)
+  paymentStatus    PaymentStatus   @default(PENDING)
+  settlementStatus SettlementStatus @default(NOT_ELIGIBLE)
+
+  /// Amount breakdown (INR)
+  subtotal    Decimal @db.Decimal(10, 2) @default(0)
+  tax         Decimal @db.Decimal(10, 2) @default(0)
+  shippingFee Decimal @db.Decimal(10, 2) @default(0)
+  discount    Decimal @db.Decimal(10, 2) @default(0)
+  totalAmount Decimal @db.Decimal(10, 2) @default(0)
+
+  /// Legacy/platform fee fields (used by existing flows)
   grossAmount Decimal @db.Decimal(10, 2)
   platformFee Decimal @db.Decimal(10, 2)
   netPayable  Decimal @db.Decimal(10, 2)
@@ -215,10 +237,14 @@ model Order {
   items         OrderItem[]
   payment       Payment?
   ledgerEntries LedgerEntry[]
+  shipments     Shipment[]
+  refunds       Refund[]
+  events        OrderEvent[]
 
   @@unique([merchantId, orderNumber])
   @@index([merchantId])
   @@index([merchantId, status])
+  @@index([merchantId, stage])
   @@index([merchantId, createdAt])
   @@index([orderNumber])
   @@map("orders")
@@ -234,14 +260,28 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum OrderStage {
+  NEW
+  CONFIRMED
+  PACKED
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
 // Order items
 
 model OrderItem {
   id        String   @id @default(cuid())
   orderId   String
   productId String
-  quantity  Int
-  price     Int
+  productName String?
+  sku         String?
+  imageUrl    String?
+  quantity    Int
+  price       Int
   createdAt DateTime @default(now())
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -250,6 +290,68 @@ model OrderItem {
   @@index([orderId])
   @@index([productId])
   @@map("order_items")
+}
+
+model Shipment {
+  id          String   @id @default(cuid())
+  orderId     String
+  courierName String
+  awb         String
+  trackingUrl String?
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("shipments")
+}
+
+model Refund {
+  id        String        @id @default(cuid())
+  orderId   String
+  amount    Decimal       @db.Decimal(10, 2)
+  reason    String
+  status    RefundStatus  @default(PENDING)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("refunds")
+}
+
+model OrderEvent {
+  id        String         @id @default(cuid())
+  orderId   String
+  type      OrderEventType
+  message   String
+  oldValue  Json?
+  newValue  Json?
+  createdBy String
+  createdAt DateTime       @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("order_events")
+}
+
+enum RefundStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum OrderEventType {
+  STAGE_CHANGE
+  PAYMENT_UPDATE
+  NOTE
+  SYSTEM
 }
 
 // ============================================================================
@@ -300,6 +402,14 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum SettlementStatus {
+  NOT_ELIGIBLE
+  ELIGIBLE
+  ON_HOLD
+  SETTLED
 }
 
 // ============================================================================
@@ -516,4 +626,113 @@ model PlatformSettings {
   defaultPricingPackage PricingPackage? @relation(fields: [defaultPricingPackageId], references: [id], onDelete: SetNull)
 
   @@map("platform_settings")
+}
+
+// ============================================================================
+// MERCHANT ONBOARDING
+// ============================================================================
+
+model MerchantOnboarding {
+  id          String              @id @default(cuid())
+  merchantId  String              @unique
+  
+  // Onboarding status
+  onboardingStatus OnboardingStatus @default(NOT_STARTED)
+  completedAt      DateTime?
+  profileCompletionPercent Int?   @default(0) // 0-100
+  
+  // PAN Details (Layer 1 - Compliance)
+  panType         String?  // "INDIVIDUAL" | "COMPANY" | "HUF" | "PARTNERSHIP" | "LLP" | "AOP" | "BOI"
+  panNumber       String?  // 10 alphanumeric characters
+  panName         String?  // Name as per PAN
+  panDobOrIncorp  DateTime? // Date of birth (individual) or Incorporation date (company)
+  panHolderRole   String?  // "PROPRIETOR" | "DIRECTOR" | "PARTNER" | etc.
+  
+  // GST Details (Layer 1 - Compliance)
+  gstStatus              GstStatus @default(NOT_REGISTERED)
+  gstin                  String?   // 15 alphanumeric characters (if REGISTERED)
+  gstLegalName           String?   // Legal name as per GST certificate
+  gstTradeName           String?   // Trade name (if different)
+  gstState               String?   // State code (2 digits) or state name
+  gstComposition         Boolean   @default(false) // Composition scheme
+  gstNotRegisteredReason String?   // Reason if NOT_REGISTERED
+  
+  // Business Basics (Layer 2)
+  storeDisplayName   String?  // Display name for store (can differ from legal name)
+  legalBusinessName  String?  // Legal business name
+  yearStarted        Int?     // Year business started
+  businessType       String?  // "SOLE_PROPRIETORSHIP" | "PARTNERSHIP" | "LLP" | "PVT_LTD" | "PUBLIC_LTD" | "HUF" | "OTHER"
+  primaryCategory    String?  // Primary product category
+  secondaryCategory  String?  // Secondary category (optional)
+  avgPriceRange      String?  // "UNDER_500" | "500_1000" | "1000_5000" | "5000_10000" | "ABOVE_10000"
+  expectedSkuRange   String?  // "UNDER_10" | "10_50" | "50_100" | "100_500" | "ABOVE_500"
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([onboardingStatus])
+  @@map("merchant_onboarding")
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum GstStatus {
+  REGISTERED
+  APPLIED
+  NOT_REGISTERED
+}
+
+// ============================================================================
+// MERCHANT BANK ACCOUNT
+// ============================================================================
+
+model MerchantBankAccount {
+  id                 String                 @id @default(cuid())
+  merchantId         String                 @unique
+  accountHolderName  String
+  bankName           String
+  accountNumber      String
+  ifscCode           String
+  accountType        BankAccountType        @default(SAVINGS)
+  isPrimary          Boolean                @default(true)
+  verificationStatus BankVerificationStatus @default(NOT_SUBMITTED)
+  proofType          BankProofType?
+  proofDocumentUrl   String?
+  proofUploadedAt    DateTime?
+  submittedAt        DateTime?
+  verifiedAt         DateTime?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([verificationStatus])
+  @@map("merchant_bank_accounts")
+}
+
+enum BankAccountType {
+  SAVINGS
+  CURRENT
+}
+
+enum BankVerificationStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum BankProofType {
+  CANCELLED_CHEQUE
+  BANK_STATEMENT
 }

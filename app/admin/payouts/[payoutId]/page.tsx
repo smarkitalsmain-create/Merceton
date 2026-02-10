@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ClientDate } from "@/components/ClientDate"
 
 export default async function PayoutDetailPage({
   params,
@@ -96,14 +97,14 @@ export default async function PayoutDetailPage({
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Created</span>
               <span className="text-sm">
-                {new Date(payout.createdAt).toLocaleString()}
+                <ClientDate value={payout.createdAt} />
               </span>
             </div>
             {payout.processedAt && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Processed</span>
                 <span className="text-sm">
-                  {new Date(payout.processedAt).toLocaleString()}
+                  <ClientDate value={payout.processedAt} />
                 </span>
               </div>
             )}
@@ -185,7 +186,7 @@ export default async function PayoutDetailPage({
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">
-                          {new Date(entry.createdAt).toLocaleDateString()}
+                          <ClientDate value={entry.createdAt} />
                         </TableCell>
                       </TableRow>
                     ))

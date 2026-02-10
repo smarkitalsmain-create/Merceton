@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 
 interface ProductGridSectionProps {
+  storeSlug: string
   title: string
   products: Array<{
     id: string
@@ -15,7 +16,7 @@ interface ProductGridSectionProps {
   }>
 }
 
-export function ProductGridSection({ title, products }: ProductGridSectionProps) {
+export function ProductGridSection({ storeSlug, title, products }: ProductGridSectionProps) {
   if (!products.length) return null
 
   return (
@@ -30,7 +31,7 @@ export function ProductGridSection({ title, products }: ProductGridSectionProps)
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => (
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <Link href="#">
+              <Link href={`/s/${storeSlug}/p/${product.id}`}>
                 {product.images.length > 0 && (
                   <div className="relative w-full h-64">
                     <Image

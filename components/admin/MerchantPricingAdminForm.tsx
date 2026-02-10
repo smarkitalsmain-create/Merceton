@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { assignMerchantPricingPackage, updateMerchantFeeOverrides } from "@/app/actions/pricing"
+import { formatMoney } from "@/lib/formatMoney"
 import { useRouter } from "next/navigation"
 import { Save } from "lucide-react"
 
@@ -158,7 +159,7 @@ export function MerchantPricingAdminForm({
               <SelectContent>
                 {packages.map((pkg) => (
                   <SelectItem key={pkg.id} value={pkg.id}>
-                    {pkg.name} - ₹{(pkg.fixedFeePaise / 100).toFixed(2)} + {pkg.variableFeeBps / 100}%
+                    {pkg.name} - ₹{formatMoney(pkg.fixedFeePaise / 100)} + {pkg.variableFeeBps / 100}%
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -169,7 +170,7 @@ export function MerchantPricingAdminForm({
             <div className="rounded-md border p-4 bg-muted/50">
               <h4 className="font-medium mb-2">Package Details</h4>
               <div className="text-sm space-y-1">
-                <div>Fixed Fee: ₹{(selectedPackage.fixedFeePaise / 100).toFixed(2)}</div>
+                <div>Fixed Fee: ₹{formatMoney(selectedPackage.fixedFeePaise / 100)}</div>
                 <div>Variable Fee: {selectedPackage.variableFeeBps / 100}%</div>
                 <div>Payout Frequency: {selectedPackage.payoutFrequency}</div>
               </div>
@@ -234,25 +235,28 @@ export function MerchantPricingAdminForm({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="payoutFrequencyOverride">Payout Frequency Override</Label>
-              <Select
-                value={formData.payoutFrequencyOverride}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, payoutFrequencyOverride: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Use package default" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Use package default</SelectItem>
-                  <SelectItem value="WEEKLY">Weekly</SelectItem>
-                  <SelectItem value="DAILY">Daily</SelectItem>
-                  <SelectItem value="MANUAL">Manual</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="payoutFrequencyOverride">Payout Frequency Override</Label>
+            <Select
+              value={formData.payoutFrequencyOverride || "NONE"}
+              onValueChange={(value) =>
+                setFormData({
+                  ...formData,
+                  payoutFrequencyOverride: value === "NONE" ? "" : value,
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Use package default" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Use package default</SelectItem>
+                <SelectItem value="WEEKLY">Weekly</SelectItem>
+                <SelectItem value="DAILY">Daily</SelectItem>
+                <SelectItem value="MANUAL">Manual</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
             <div className="space-y-2">
               <Label htmlFor="holdbackOverrideBps">Holdback Override (%)</Label>

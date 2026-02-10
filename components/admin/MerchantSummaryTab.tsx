@@ -1,5 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { formatMoney } from "@/lib/formatMoney"
+import { ClientDate } from "@/components/ClientDate"
 
 interface MerchantSummaryTabProps {
   merchant: {
@@ -46,7 +48,7 @@ export function MerchantSummaryTab({ merchant, stats }: MerchantSummaryTabProps)
             <CardTitle className="text-sm">Total GMV</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{stats.gmv.toFixed(2)}</div>
+            <div className="text-2xl font-bold">₹{formatMoney(stats.gmv)}</div>
           </CardContent>
         </Card>
 
@@ -94,7 +96,9 @@ export function MerchantSummaryTab({ merchant, stats }: MerchantSummaryTabProps)
           </div>
           <div>
             <label className="text-sm font-medium">Created At</label>
-            <p className="text-sm">{new Date(merchant.createdAt).toLocaleString()}</p>
+            <p className="text-sm">
+              <ClientDate value={merchant.createdAt} />
+            </p>
           </div>
         </CardContent>
       </Card>

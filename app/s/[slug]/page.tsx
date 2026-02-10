@@ -177,6 +177,7 @@ export default async function StorePage({
                 return (
                   <ProductGridSection
                     key={section.id}
+                    storeSlug={merchant.slug}
                     title={section.settings.title}
                     products={limitedProducts}
                   />

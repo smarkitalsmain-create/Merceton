@@ -6,6 +6,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/webhooks(.*)",
+  "/api/cloudinary/sign(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
@@ -14,7 +15,8 @@ export default clerkMiddleware(async (auth, req) => {
     return;
   }
 
-  // Protect all other routes (including /admin, /dashboard, /onboarding, and API routes)
+  // Protect all other routes (including /admin, /dashboard, and API routes)
+  // Middleware must not call cookies()/Prisma; onboarding gating is enforced in dashboard layout.
   auth().protect();
 });
 

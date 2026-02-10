@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
+import { ClientDate } from "@/components/ClientDate"
+import { formatMoney } from "@/lib/formatMoney"
 
 export default async function OrderDetailPage({
   params,
@@ -85,7 +87,7 @@ export default async function OrderDetailPage({
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Created</span>
               <span className="text-sm">
-                {new Date(order.createdAt).toLocaleString()}
+                <ClientDate value={order.createdAt} />
               </span>
             </div>
           </CardContent>
@@ -98,15 +100,21 @@ export default async function OrderDetailPage({
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Gross Amount</span>
-              <span className="font-medium">₹{order.grossAmount.toNumber().toFixed(2)}</span>
+              <span className="font-medium">
+                ₹{formatMoney(order.grossAmount.toNumber())}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Platform Fee</span>
-              <span className="font-medium">₹{order.platformFee.toNumber().toFixed(2)}</span>
+              <span className="font-medium">
+                ₹{formatMoney(order.platformFee.toNumber())}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Net Payable</span>
-              <span className="font-medium">₹{order.netPayable.toNumber().toFixed(2)}</span>
+              <span className="font-medium">
+                ₹{formatMoney(order.netPayable.toNumber())}
+              </span>
             </div>
             {order.payment && (
               <>
@@ -143,11 +151,11 @@ export default async function OrderDetailPage({
                   <div>
                     <p className="font-medium">{item.product.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      Quantity: {item.quantity} × ₹{(item.price / 100).toFixed(2)}
+                      Quantity: {item.quantity} × ₹{formatMoney(item.price / 100)}
                     </p>
                   </div>
                   <span className="font-medium">
-                    ₹{((item.price * item.quantity) / 100).toFixed(2)}
+                    ₹{formatMoney((item.price * item.quantity) / 100)}
                   </span>
                 </div>
               ))}
