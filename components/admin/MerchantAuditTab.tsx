@@ -42,7 +42,7 @@ export function MerchantAuditTab({ merchantId }: MerchantAuditTabProps) {
           {logs.map((log) => (
             <TableRow key={log.id}>
               <TableCell>
-                <Badge variant="outline">{log.actionType}</Badge>
+                <Badge variant="outline">{log.action}</Badge>
               </TableCell>
               <TableCell>{log.actorEmail || "Unknown"}</TableCell>
               <TableCell className="max-w-md truncate">{log.reason}</TableCell>

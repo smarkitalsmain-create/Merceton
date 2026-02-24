@@ -14,7 +14,7 @@ interface DomainSettingsFormProps {
   merchant: {
     id: string
     customDomain: string | null
-    domainStatus: "PENDING" | "VERIFIED" | "ACTIVE"
+    domainStatus: "PENDING" | "VERIFIED" | "ACTIVE" | "FAILED"
     domainVerificationToken: string | null
     domainVerifiedAt: Date | null
   }
@@ -41,10 +41,10 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
 
     startTransition(async () => {
       try {
-        const res = await fetch("/api/domain/save", {
+        const res = await fetch("/api/domains/add", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ domain: domain.trim() }),
+          body: JSON.stringify({ customDomain: domain.trim() }),
         })
 
         const data = await res.json()
@@ -54,9 +54,10 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
         }
 
         setMerchant(data.merchant)
+        setDomain(data.merchant.customDomain || "")
         toast({
           title: "Domain saved",
-          description: "Please add the DNS record to verify your domain",
+          description: data.message || "Please add the DNS record to verify your domain",
         })
         router.refresh()
       } catch (error) {
@@ -72,14 +73,23 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
   const handleVerify = () => {
     startTransition(async () => {
       try {
-        const res = await fetch("/api/domain/verify", {
+        const res = await fetch("/api/domains/verify", {
           method: "POST",
         })
 
         const data = await res.json()
 
         if (!res.ok) {
-          throw new Error(data.error || "Failed to verify domain")
+          // Handle detailed error messages
+          const errorMsg = data.error || "Failed to verify domain"
+          setMerchant((prev) => ({ ...prev, domainStatus: "FAILED" as any }))
+          toast({
+            title: "Verification failed",
+            description: errorMsg,
+            variant: "destructive",
+          })
+          router.refresh()
+          return
         }
 
         setMerchant(data.merchant)
@@ -104,7 +114,7 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
 
     startTransition(async () => {
       try {
-        const res = await fetch("/api/domain/disconnect", {
+        const res = await fetch("/api/domains/disconnect", {
           method: "POST",
         })
 
@@ -152,6 +162,13 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
             <CheckCircle2 className="mr-1 h-3 w-3" />
             ACTIVE
+          </Badge>
+        )
+      case "FAILED":
+        return (
+          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+            <XCircle className="mr-1 h-3 w-3" />
+            FAILED
           </Badge>
         )
       default:
@@ -204,7 +221,7 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
               </Button>
             )}
 
-            {merchant.customDomain && merchant.domainStatus === "PENDING" && (
+            {merchant.customDomain && (merchant.domainStatus === "PENDING" || merchant.domainStatus === "FAILED") && (
               <Button onClick={handleVerify} disabled={isPending} variant="outline">
                 {isPending ? (
                   <>
@@ -232,10 +249,10 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
         </CardContent>
       </Card>
 
-      {merchant.customDomain && merchant.domainStatus === "PENDING" && (
+      {merchant.customDomain && (merchant.domainStatus === "PENDING" || merchant.domainStatus === "FAILED") && (
         <Card>
           <CardHeader>
-            <CardTitle>DNS Verification</CardTitle>
+            <CardTitle>DNS Verification Instructions</CardTitle>
             <CardDescription>
               Add this TXT record to your DNS to verify domain ownership
             </CardDescription>
@@ -243,18 +260,28 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
           <CardContent className="space-y-4">
             <div className="bg-muted p-4 rounded-lg space-y-2 font-mono text-sm">
               <div>
-                <strong>TXT record:</strong>
+                <strong>Type:</strong> TXT
               </div>
               <div>
-                <strong>Host:</strong> _sellarity.{merchant.customDomain}
+                <strong>Name/Host:</strong> _merceton-verify.{merchant.customDomain}
               </div>
               <div>
                 <strong>Value:</strong> {merchant.domainVerificationToken}
               </div>
             </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-900 font-medium mb-2">How to add this record:</p>
+              <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                <li>Log in to your domain registrar or DNS provider</li>
+                <li>Navigate to DNS management / DNS records</li>
+                <li>Add a new TXT record with the values above</li>
+                <li>Save the changes</li>
+                <li>Wait 2-5 minutes for DNS propagation</li>
+                <li>Click &quot;Verify Domain&quot; button above</li>
+              </ol>
+            </div>
             <p className="text-sm text-muted-foreground">
-              {`After adding the DNS record, click "Verify Domain" to check verification.`}{" "}
-              DNS changes may take a few minutes to propagate.
+              DNS changes may take a few minutes to propagate. If verification fails, wait a bit longer and try again.
             </p>
           </CardContent>
         </Card>
@@ -264,22 +291,34 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
         <Card>
           <CardHeader>
             <CardTitle>Domain Verified</CardTitle>
-            <CardDescription>Your custom domain is ready to serve your storefront</CardDescription>
+            <CardDescription>Your custom domain has been verified</CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm">
-              Your storefront will be available at:{" "}
-              <a
-                href={`https://${merchant.customDomain}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline"
-              >
-                https://{merchant.customDomain}
-              </a>
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Once DNS is configured, your domain will automatically serve your storefront.
+          <CardContent className="space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-sm text-green-900 font-medium mb-2">✓ Domain verification successful</p>
+              <p className="text-sm text-green-800">
+                Your domain <strong>{merchant.customDomain}</strong> has been verified and is ready to use.
+              </p>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-900 font-medium mb-2">Next Steps:</p>
+              <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                <li>Configure your domain&apos;s DNS to point to our servers (A/CNAME records)</li>
+                <li>SSL certificate provisioning is in progress</li>
+                <li>Once DNS and SSL are configured, your storefront will be available at:{" "}
+                  <a
+                    href={`https://${merchant.customDomain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline font-medium"
+                  >
+                    https://{merchant.customDomain}
+                  </a>
+                </li>
+              </ol>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <strong>Note:</strong> SSL provisioning may take a few minutes to complete. Your domain will be fully active once SSL is provisioned.
             </p>
           </CardContent>
         </Card>

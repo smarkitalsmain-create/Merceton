@@ -1,8 +1,8 @@
 export const runtime = "nodejs"
 
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { prisma, prismaTx } from "@/lib/prisma";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function slugify(input: string) {
   return input
@@ -14,10 +14,17 @@ function slugify(input: string) {
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) {
+    const supabase = createSupabaseServerClient()
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
+
+    if (error || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const userId = user.id;
 
     const body = await req.json().catch(() => null);
     const displayNameRaw = body?.displayName ?? body?.storeName ?? "";
@@ -156,6 +163,20 @@ export async function POST(req: Request) {
       where: { authUserId: userId },
       include: { merchant: true },
     });
+
+    // Email trigger: New merchant signup alert (non-blocking)
+    try {
+      const { sendOpsNewMerchantSignupAlert } = await import("@/lib/email/notifications");
+      const userEmail = userWithMerchant?.email || result.user?.email || `${userId}@no-email.local`;
+      await sendOpsNewMerchantSignupAlert({
+        merchantName: result.merchant.displayName,
+        merchantEmail: userEmail,
+        createdAt: result.merchant.createdAt.toISOString(),
+        adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/admin/merchants/${result.merchant.id}`,
+      });
+    } catch (emailError) {
+      console.error("[email] Failed to send new merchant signup alert:", emailError);
+    }
     
     return NextResponse.json(
       { merchant: result.merchant, user: userWithMerchant || result.user },

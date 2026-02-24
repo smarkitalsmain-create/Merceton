@@ -18,7 +18,7 @@ export const panStepSchema = z.object({
 
 export type PanStepData = z.infer<typeof panStepSchema>
 
-// GST Step
+// GST Step (includes invoice/billing address)
 export const gstStepSchema = z.object({
   gstStatus: z.enum(["REGISTERED", "APPLIED", "NOT_REGISTERED"]),
   gstin: z.string().optional(),
@@ -27,6 +27,14 @@ export const gstStepSchema = z.object({
   gstState: z.string().optional(),
   gstComposition: z.boolean().default(false),
   gstNotRegisteredReason: z.string().optional(),
+  // Invoice/Billing Address fields
+  invoiceAddressLine1: z.string().min(1, "Address line 1 is required"),
+  invoiceAddressLine2: z.string().optional(),
+  invoiceCity: z.string().min(1, "City is required"),
+  invoicePincode: z.coerce.string().trim().regex(/^[0-9]{6}$/, "Pincode must be exactly 6 digits"),
+  invoicePhone: z.string().optional().or(z.literal("")),
+  invoiceEmail: z.string().email("Invalid email format").optional().or(z.literal("")),
+  invoicePrefix: z.string().trim().max(8, "Prefix must be 8 characters or less").regex(/^[A-Z0-9]*$/, "Only A-Z and 0-9 allowed").optional(),
 }).refine(
   (data) => {
     if (data.gstStatus === "REGISTERED") {
@@ -67,3 +75,17 @@ export const businessBasicsStepSchema = z.object({
 })
 
 export type BusinessBasicsStepData = z.infer<typeof businessBasicsStepSchema>
+
+// Contact Info (for invoices)
+export const contactInfoSchema = z.object({
+  contactEmail: z.string().email("Invalid email format").optional().or(z.literal("")),
+  contactPhone: z.string().optional(),
+  websiteUrl: z.string().url("Invalid URL format").optional().or(z.literal("")),
+  contactAddressLine1: z.string().min(1, "Address line 1 is required"),
+  contactAddressLine2: z.string().optional(),
+  contactCity: z.string().min(1, "City is required"),
+  contactState: z.string().min(1, "State is required"),
+  contactPincode: z.string().regex(/^[0-9]{6}$/, "Pincode must be 6 digits"),
+})
+
+export type ContactInfoData = z.infer<typeof contactInfoSchema>

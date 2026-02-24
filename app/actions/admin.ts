@@ -10,6 +10,10 @@ const auditReasonSchema = z.object({
   reason: z.string().min(1, "Reason is required").max(500),
 })
 
+const holdReasonSchema = z.object({
+  reason: z.string().min(1, "Reason is required").max(500),
+})
+
 /**
  * Activate merchant (admin+)
  */
@@ -180,6 +184,100 @@ export async function setMerchantPayoutHold(
   revalidatePath("/admin/merchants")
   revalidatePath(`/admin/merchants/${merchantId}`)
   return { success: true, feeConfig: updated }
+}
+
+/**
+ * Put merchant account on hold (admin+)
+ */
+export async function putMerchantOnHold(merchantId: string, reason: string) {
+  await requireAdmin()
+  const actor = await getAdminIdentity()
+  if (!actor) {
+    throw new Error("Admin identity not found")
+  }
+
+  const existing = await prisma.merchant.findUnique({
+    where: { id: merchantId },
+  })
+  if (!existing) {
+    throw new Error("Merchant not found")
+  }
+
+  const validatedReason = holdReasonSchema.parse({ reason }).reason
+  const beforeJson = existing
+
+  const merchant = await prisma.merchant.update({
+    where: { id: merchantId },
+    data: {
+      accountStatus: "ON_HOLD",
+      holdReasonCode: validatedReason,
+      holdReasonText: validatedReason,
+      holdAppliedAt: new Date(),
+      holdAppliedByUserId: actor.userId,
+    },
+  })
+
+  await logAdminAction({
+    actorUserId: actor.userId,
+    actorEmail: actor.email,
+    actionType: "MERCHANT_ACCOUNT_HOLD",
+    entityType: "Merchant",
+    entityId: merchantId,
+    reason: validatedReason,
+    beforeJson,
+    afterJson: merchant,
+  })
+
+  revalidatePath("/admin/merchants")
+  revalidatePath(`/admin/merchants/${merchantId}`)
+  return { success: true, merchant }
+}
+
+/**
+ * Reactivate merchant account from hold (admin+)
+ */
+export async function reactivateMerchantAccount(merchantId: string, reason: string) {
+  await requireAdmin()
+  const actor = await getAdminIdentity()
+  if (!actor) {
+    throw new Error("Admin identity not found")
+  }
+
+  const existing = await prisma.merchant.findUnique({
+    where: { id: merchantId },
+  })
+  if (!existing) {
+    throw new Error("Merchant not found")
+  }
+
+  const validatedReason = holdReasonSchema.parse({ reason }).reason
+  const beforeJson = existing
+
+  const merchant = await prisma.merchant.update({
+    where: { id: merchantId },
+    data: {
+      accountStatus: "ACTIVE",
+      holdReasonCode: null,
+      holdReasonText: null,
+      holdAppliedAt: null,
+      holdAppliedByUserId: null,
+    },
+  })
+
+  await logAdminAction({
+    actorUserId: actor.userId,
+    actorEmail: actor.email,
+    actionType: "MERCHANT_ACCOUNT_REACTIVATE",
+    entityType: "Merchant",
+    entityId: merchantId,
+    reason: validatedReason,
+    beforeJson,
+    afterJson: merchant,
+  })
+
+  revalidatePath("/admin/merchants")
+  revalidatePath(`/admin/merchants/${merchantId}`)
+  return { success: true, merchant }
 }
 
 /**

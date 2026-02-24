@@ -4,6 +4,7 @@ import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Loader2, Upload, X } from "lucide-react"
 import Image from "next/image"
+import { uploadImage, type UploadKind } from "@/lib/uploads/uploadImage"
 
 interface SingleImageUploadProps {
   value?: string | null
@@ -11,6 +12,7 @@ interface SingleImageUploadProps {
   maxSizeMB?: number
   className?: string
   disabled?: boolean
+  kind?: UploadKind
 }
 
 export function SingleImageUpload({
@@ -19,6 +21,7 @@ export function SingleImageUpload({
   maxSizeMB = 5,
   className = "",
   disabled = false,
+  kind = "product",
 }: SingleImageUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -28,19 +31,6 @@ export function SingleImageUpload({
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      alert("Please select an image file")
-      return
-    }
-
-    // Validate file size
-    const maxSizeBytes = maxSizeMB * 1024 * 1024
-    if (file.size > maxSizeBytes) {
-      alert(`Image size must be less than ${maxSizeMB}MB`)
-      return
-    }
 
     // Show preview immediately
     const reader = new FileReader()
@@ -54,51 +44,15 @@ export function SingleImageUpload({
     setUploadProgress(0)
 
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-
-      // Use XMLHttpRequest for progress tracking
-      const xhr = new XMLHttpRequest()
-
-      const result = await new Promise<{ url: string }>((resolve, reject) => {
-        xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable) {
-            const progress = (e.loaded / e.total) * 100
-            setUploadProgress(progress)
-          }
-        })
-
-        xhr.addEventListener("load", () => {
-          if (xhr.status === 200) {
-            try {
-              const response = JSON.parse(xhr.responseText)
-              resolve(response)
-            } catch (error) {
-              reject(new Error("Failed to parse response"))
-            }
-          } else {
-            try {
-              const error = JSON.parse(xhr.responseText)
-              reject(new Error(error.error || "Upload failed"))
-            } catch {
-              reject(new Error(`Upload failed: ${xhr.statusText}`))
-            }
-          }
-        })
-
-        xhr.addEventListener("error", () => {
-          reject(new Error("Upload failed"))
-        })
-
-        xhr.open("POST", "/api/uploads/image")
-        xhr.send(formData)
-      })
+      // Use shared upload utility
+      const result = await uploadImage(file, kind)
 
       setPreview(result.url)
       onChange(result.url)
     } catch (error: any) {
       console.error("Upload error:", error)
-      alert(error.message || "Failed to upload image")
+      const errorMessage = error instanceof Error ? error.message : "Failed to upload image"
+      alert(errorMessage)
       // Reset preview on error
       setPreview(value || null)
     } finally {

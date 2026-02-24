@@ -1,6 +1,6 @@
 # Custom Domain Setup Guide
 
-This guide explains how to connect a custom domain to your Sellarity storefront.
+This guide explains how to connect a custom domain to your Merceton storefront.
 
 ## Overview
 
@@ -10,7 +10,7 @@ Each merchant can connect one custom domain (e.g., `www.mystore.com`) to serve t
 
 - A domain name registered with a DNS provider
 - Access to your domain's DNS settings
-- Admin access to your Sellarity merchant account
+- Admin access to your Merceton merchant account
 
 ## Setup Process
 
@@ -25,12 +25,12 @@ Each merchant can connect one custom domain (e.g., `www.mystore.com`) to serve t
 
 #### Option A: CNAME (Recommended)
 
-Point your domain to the Sellarity platform:
+Point your domain to the Merceton platform:
 
 ```
 Type: CNAME
 Name: www (or your subdomain)
-Value: [PLATFORM_BASE_URL] (provided by Sellarity)
+Value: [PLATFORM_BASE_URL] (provided by Merceton)
 ```
 
 #### Option B: A Record
@@ -43,14 +43,14 @@ Add a TXT record to verify domain ownership:
 
 ```
 Type: TXT
-Name: _sellarity-verify.[your-domain]
-Value: sellarity-verification=[verification-token]
+Name: _merceton-verify.[your-domain]
+Value: merceton-verification=[verification-token]
 ```
 
 **Example:**
 - Domain: `www.mystore.com`
-- TXT Record Name: `_sellarity-verify.www.mystore.com`
-- TXT Record Value: `sellarity-verification=abc123...`
+- TXT Record Name: `_merceton-verify.www.mystore.com`
+- TXT Record Value: `merceton-verification=abc123...`
 
 ### 4. Verify Domain
 
@@ -87,9 +87,9 @@ SSL certificates are automatically provisioned by the hosting platform (Vercel/N
 
 1. **Check DNS propagation**: Use `dig` or online DNS checkers
    ```bash
-   dig TXT _sellarity-verify.www.mystore.com
+   dig TXT _merceton-verify.www.mystore.com
    ```
-2. **Verify record format**: Ensure exact format `sellarity-verification=<token>`
+2. **Verify record format**: Ensure exact format `merceton-verification=<token>`
 3. **Wait longer**: Some DNS providers take up to 24 hours
 
 ### Domain Not Loading

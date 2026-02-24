@@ -41,3 +41,6 @@ next-env.d.ts
 
 # prisma
 /prisma/migrations
+
+# fonts (keep invoice fonts tracked)
+# !assets/fonts/*.ttf

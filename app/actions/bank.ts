@@ -27,8 +27,8 @@ export async function upsertBankAccount(data: BankAccountDetailsData) {
       where: { merchantId: merchant.id },
     })
 
-    // If status is VERIFIED, lock account details (require changeBankAccount flow)
-    if (existing?.verificationStatus === "VERIFIED") {
+    // If status is VERIFIED (or verifiedAt is set), lock account details (require changeBankAccount flow)
+    if (existing?.verificationStatus === "VERIFIED" || existing?.verifiedAt) {
       return {
         success: false,
         error: "Cannot edit verified account. Use 'Change Bank Account' to update.",
@@ -97,7 +97,7 @@ export async function submitBankAccountForVerification(data: BankAccountSubmitDa
     }
 
     // If status is VERIFIED, require changeBankAccount flow
-    if (existing.verificationStatus === "VERIFIED") {
+    if (existing.verificationStatus === "VERIFIED" || existing.verifiedAt) {
       return {
         success: false,
         error: "Cannot resubmit verified account. Use 'Change Bank Account' to update.",

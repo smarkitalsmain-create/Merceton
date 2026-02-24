@@ -21,6 +21,7 @@ import Script from "next/script"
 
 const checkoutSchema = z.object({
   customerName: z.string().min(1, "Name is required"),
+  customerEmail: z.string().min(1, "Email is required").email("Invalid email format"),
   customerPhone: z.string().min(10, "Phone number is required").max(15),
   customerAddress: z.string().min(1, "Address is required"),
   city: z.string().min(1, "City is required"),
@@ -29,6 +30,7 @@ const checkoutSchema = z.object({
   paymentMethod: z.enum(["COD", "UPI"], {
     required_error: "Please select a payment method",
   }),
+  couponCode: z.string().optional().nullable(),
 })
 
 type CheckoutFormData = z.infer<typeof checkoutSchema>
@@ -50,6 +52,12 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
   const { toast } = useToast()
   const [isPending, startTransition] = useTransition()
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
+  const [couponCode, setCouponCode] = useState("")
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string
+    discount: number
+  } | null>(null)
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false)
 
   const {
     register,
@@ -84,6 +92,58 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
   }
 
   const totalPrice = getTotalPrice()
+  const discountAmount = appliedCoupon ? appliedCoupon.discount : 0
+  const finalPrice = Math.max(0, totalPrice - discountAmount)
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) {
+      toast({
+        title: "Coupon code required",
+        description: "Please enter a coupon code",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsValidatingCoupon(true)
+    try {
+      const response = await fetch(`/api/coupons/validate?code=${encodeURIComponent(couponCode.trim())}&merchantId=${merchantId}&amount=${Math.round(totalPrice * 100)}`)
+      const data = await response.json()
+
+      if (!response.ok || !data.valid) {
+        toast({
+          title: "Invalid coupon",
+          description: data.error || "This coupon code is not valid",
+          variant: "destructive",
+        })
+        setAppliedCoupon(null)
+        return
+      }
+
+      setAppliedCoupon({
+        code: couponCode.trim().toUpperCase(),
+        discount: data.discountAmount || 0,
+      })
+      toast({
+        title: "Coupon applied",
+        description: `Discount of ₹${(data.discountAmount || 0).toFixed(2)} applied`,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to validate coupon. Please try again.",
+        variant: "destructive",
+      })
+      setAppliedCoupon(null)
+    } finally {
+      setIsValidatingCoupon(false)
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    setCouponCode("")
+    setAppliedCoupon(null)
+  }
 
   const handleRazorpayPayment = async (orderId: string) => {
     if (!window.Razorpay) {
@@ -117,7 +177,7 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: amount,
         currency: "INR",
-        name: "Sellarity",
+        name: "Merceton",
         description: `Order payment`,
         order_id: razorpayOrderId,
         handler: async function (response: any) {
@@ -185,37 +245,89 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
   }
 
   const onSubmit = (data: CheckoutFormData) => {
-    startTransition(async () => {
-      const result = await createOrder({
+    // DEV-only: Log form submission
+    if (process.env.NODE_ENV === "development") {
+      console.log("[CheckoutForm] Submitting order:", {
         merchantId,
         storeSlug,
-        items: cart.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-        })),
-        customerName: data.customerName,
-        customerPhone: data.customerPhone,
-        customerAddress: `${data.customerAddress}, ${data.city}, ${data.state} ${data.pincode}`,
+        itemCount: cart.length,
         paymentMethod: data.paymentMethod,
       })
+    }
 
-      if (result.success && result.order) {
-        // For COD, redirect to confirmation
-        if (data.paymentMethod === "COD") {
-          clearCart()
-          toast({
-            title: "Order placed successfully!",
-            description: `Order ${result.order.orderNumber} has been confirmed.`,
+    startTransition(async () => {
+      try {
+        const result = await createOrder({
+          merchantId,
+          storeSlug,
+          items: cart.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          })),
+          customerName: data.customerName,
+          customerEmail: data.customerEmail,
+          customerPhone: data.customerPhone,
+          customerAddress: `${data.customerAddress}, ${data.city}, ${data.state} ${data.pincode}`,
+          paymentMethod: data.paymentMethod,
+          couponCode: appliedCoupon?.code || null,
+        })
+
+        // DEV-only: Log result
+        if (process.env.NODE_ENV === "development") {
+          console.log("[CheckoutForm] Order creation result:", {
+            success: result.success,
+            hasOrder: !!result.order,
+            orderId: result.order?.id,
+            orderNumber: result.order?.orderNumber,
+            error: result.error,
           })
-          router.push(`/s/${storeSlug}/order/${result.order.id}`)
-        } else {
-          // For UPI/online, initiate Razorpay payment
-          await handleRazorpayPayment(result.order.id)
         }
-      } else {
+
+        // Validate response structure
+        if (!result || typeof result !== "object") {
+          console.error("[CheckoutForm] Invalid response from createOrder:", result)
+          toast({
+            title: "Order failed",
+            description: "Invalid response from server. Please try again.",
+            variant: "destructive",
+          })
+          return
+        }
+
+        // Check for success and valid order
+        if (result.success && result.order && result.order.id && result.order.orderNumber) {
+          // For COD, redirect to confirmation
+          if (data.paymentMethod === "COD") {
+            clearCart()
+            toast({
+              title: "Order placed successfully!",
+              description: `Order ${result.order.orderNumber} has been confirmed.`,
+            })
+            router.push(`/s/${storeSlug}/order/${result.order.id}`)
+          } else {
+            // For UPI/online, initiate Razorpay payment
+            await handleRazorpayPayment(result.order.id)
+          }
+        } else {
+          // Handle failure case
+          const errorMessage = result.error || "Failed to place order. Please try again."
+          console.error("[CheckoutForm] Order creation failed:", {
+            success: result.success,
+            hasOrder: !!result.order,
+            error: errorMessage,
+          })
+          toast({
+            title: "Order failed",
+            description: errorMessage,
+            variant: "destructive",
+          })
+        }
+      } catch (error) {
+        // Catch any unexpected errors
+        console.error("[CheckoutForm] Unexpected error during order creation:", error)
         toast({
           title: "Order failed",
-          description: result.error || "Failed to place order. Please try again.",
+          description: error instanceof Error ? error.message : "An unexpected error occurred. Please try again.",
           variant: "destructive",
         })
       }
@@ -245,6 +357,19 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
                 />
                 {errors.customerName && (
                   <p className="text-sm text-destructive">{errors.customerName.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="customerEmail">Email *</Label>
+                <Input
+                  id="customerEmail"
+                  type="email"
+                  {...register("customerEmail")}
+                  placeholder="customer@example.com"
+                />
+                {errors.customerEmail && (
+                  <p className="text-sm text-destructive">{errors.customerEmail.message}</p>
                 )}
               </div>
 
@@ -349,6 +474,57 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Coupon Code</CardTitle>
+              <CardDescription>Enter a coupon code to apply discount</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
+                  <div>
+                    <p className="text-sm font-medium text-green-900">
+                      Coupon {appliedCoupon.code} applied
+                    </p>
+                    <p className="text-sm text-green-700">
+                      Discount: ₹{appliedCoupon.discount.toFixed(2)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveCoupon}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter coupon code"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleApplyCoupon()
+                      }
+                    }}
+                    disabled={isValidatingCoupon}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleApplyCoupon}
+                    disabled={isValidatingCoupon || !couponCode.trim()}
+                  >
+                    {isValidatingCoupon ? "Applying..." : "Apply"}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <div>
@@ -393,9 +569,19 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
               </div>
 
               <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Total</span>
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
                   <span>₹{totalPrice.toFixed(2)}</span>
+                </div>
+                {appliedCoupon && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount ({appliedCoupon.code})</span>
+                    <span>-₹{discountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-lg font-bold pt-2 border-t">
+                  <span>Total</span>
+                  <span>₹{finalPrice.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -411,7 +597,7 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
                   ? "Placing Order..."
                   : paymentMethod === "COD"
                   ? "Place Order (COD)"
-                  : "Pay ₹" + totalPrice.toFixed(2)}
+                  : "Pay ₹" + finalPrice.toFixed(2)}
               </Button>
             </CardContent>
           </Card>

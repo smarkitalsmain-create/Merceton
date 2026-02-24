@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import Link from "next/link"
 import { StorefrontHeader } from "@/components/StorefrontHeader"
+import { MaintenanceMode } from "@/components/MaintenanceMode"
 import { AddToCartButton } from "@/components/AddToCartButton"
 
 export default async function ProductPage({
@@ -22,6 +23,23 @@ export default async function ProductPage({
   if (!merchant) {
     notFound()
   }
+
+  const storeSettings = await prisma.merchantStoreSettings.findUnique({
+    where: { merchantId: merchant.id },
+    select: {
+      isStoreLive: true,
+      storeName: true,
+      logoUrl: true,
+    },
+  })
+
+  const isStoreLive = storeSettings?.isStoreLive ?? true
+  if (!isStoreLive || merchant.accountStatus === "ON_HOLD") {
+    return <MaintenanceMode storeName={storeSettings?.storeName || merchant.displayName} />
+  }
+
+  const logoUrl = storeSettings?.logoUrl || merchant.storefront?.logoUrl || null
+  const storeName = storeSettings?.storeName || merchant.displayName
 
   const product = await prisma.product.findFirst({
     where: {
@@ -44,8 +62,8 @@ export default async function ProductPage({
     <div className="min-h-screen bg-background">
       <StorefrontHeader
         storeSlug={merchant.slug}
-        storeName={merchant.displayName}
-        logoUrl={merchant.storefront?.logoUrl}
+        storeName={storeName}
+        logoUrl={logoUrl}
       />
 
       <main className="container mx-auto px-4 py-8">

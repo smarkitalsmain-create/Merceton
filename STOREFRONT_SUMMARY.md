@@ -144,7 +144,7 @@ Complete public storefront with cart functionality, checkout, and order creation
 ## Technical Details
 
 ### Cart Storage
-- Uses localStorage with key: `sellarity_cart_{storeSlug}`
+- Uses localStorage with key: `merceton_cart_{storeSlug}`
 - Isolated per store (different stores = different carts)
 - Persists across sessions
 - Cleared after successful order

@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     // Generate timestamp and signature
     const timestamp = Math.round(new Date().getTime() / 1000)
-    const folder = "sellarity/bank-proofs"
+    const folder = "merceton/bank-proofs"
     const stringToSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`
     const signature = crypto.createHash("sha1").update(stringToSign).digest("hex")
 

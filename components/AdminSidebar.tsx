@@ -12,6 +12,8 @@ import {
   Wallet,
   Globe,
   Settings,
+  FileText,
+  Receipt,
 } from "lucide-react"
 
 const navigation = [
@@ -41,6 +43,16 @@ const navigation = [
     icon: Wallet,
   },
   {
+    name: "Platform Invoices",
+    href: "/admin/platform-invoices",
+    icon: FileText,
+  },
+  {
+    name: "Settings",
+    href: "/admin/settings",
+    icon: Settings,
+  },
+  {
     name: "Audit Logs",
     href: "/admin/audit-logs",
     icon: Settings,
@@ -55,7 +67,7 @@ export function AdminSidebar() {
       <div className="flex h-16 items-center border-b px-6">
         <Link href="/admin" className="flex items-center gap-2">
           <Store className="h-6 w-6" />
-          <span className="text-lg font-bold">Sellarity Admin</span>
+          <span className="text-lg font-bold">Merceton Admin</span>
         </Link>
       </div>
       <nav className="flex-1 space-y-1 p-4">

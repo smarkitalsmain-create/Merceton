@@ -19,6 +19,15 @@ const config = {
     },
     extend: {
       colors: {
+        // Brand palette
+        brand: {
+          navy: "#0F172A",
+          primary: "#2563EB",
+          bg: "#F8FAFC",
+          success: "#22C55E",
+          border: "#E2E8F0",
+        },
+        // Semantic tokens mapped to CSS variables
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -51,6 +60,10 @@ const config = {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
         },
       },
       borderRadius: {

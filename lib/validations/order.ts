@@ -16,6 +16,10 @@ export const createOrderSchema = z.object({
     .min(1, "At least one item is required")
     .max(50, "Maximum 50 items per order"),
   customerName: z.string().min(1, "Name is required").max(100, "Name too long"),
+  customerEmail: z
+    .string()
+    .min(1, "Customer email is required")
+    .email("Invalid email format"),
   customerPhone: z
     .string()
     .min(10, "Phone number must be at least 10 digits")
@@ -25,6 +29,7 @@ export const createOrderSchema = z.object({
   paymentMethod: z.enum(["COD", "UPI", "RAZORPAY"], {
     errorMap: () => ({ message: "Invalid payment method" }),
   }),
+  couponCode: z.string().optional().nullable(),
 })
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>

@@ -1,9 +1,21 @@
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireMerchant } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getVerificationRecordName } from "@/lib/domains/normalize"
+import dns from "dns"
+import { promisify } from "util"
 
+const resolveTxt = promisify(dns.resolveTxt)
+
+/**
+ * Verify custom domain via DNS TXT record lookup
+ * 
+ * Checks for TXT record: _merceton-verify.<domain> = <token>
+ */
 export async function POST(request: NextRequest) {
   try {
     const merchant = await requireMerchant()
@@ -17,20 +29,72 @@ export async function POST(request: NextRequest) {
 
     if (merchant.domainStatus !== "PENDING") {
       return NextResponse.json(
-        { error: "Domain is not in PENDING status" },
+        { 
+          error: `Domain is not in PENDING status. Current status: ${merchant.domainStatus}`,
+          currentStatus: merchant.domainStatus,
+        },
         { status: 400 }
       )
     }
 
-    // Mock verification - just check if token exists
-    // In real implementation, this would do DNS lookup
-    // For now, we'll just verify the token matches what we stored
-    const token = merchant.domainVerificationToken
+    const domain = merchant.customDomain
+    const expectedToken = merchant.domainVerificationToken
+    const recordName = getVerificationRecordName(domain)
 
-    if (token) {
-      // Mock: Assume verification passes if token exists
-      // In production, this would check DNS TXT record
-      const updated = await prisma.merchant.update({
+    // Perform DNS TXT lookup
+    let txtRecords: string[][]
+    try {
+      txtRecords = await resolveTxt(recordName)
+    } catch (error: any) {
+      // DNS lookup failed - record not found or DNS error
+      // DNS failures are expected sometimes; keep logging minimal
+
+      // Update status to FAILED
+      await prisma.merchant.update({
+        where: { id: merchant.id },
+        data: { domainStatus: "FAILED" },
+      })
+
+      return NextResponse.json(
+        {
+          verified: false,
+          error: `DNS TXT record not found. Please ensure you've added the TXT record: ${recordName} = ${expectedToken}. DNS changes may take a few minutes to propagate.`,
+          recordName,
+          expectedToken,
+        },
+        { status: 400 }
+      )
+    }
+
+    // Flatten TXT records (DNS returns array of arrays)
+    const allTxtValues = txtRecords.flat()
+
+    // Check if any TXT record matches our token
+    const tokenFound = allTxtValues.some((record) => record.trim() === expectedToken)
+
+    if (!tokenFound) {
+      // Token mismatch
+      await prisma.merchant.update({
+        where: { id: merchant.id },
+        data: { domainStatus: "FAILED" },
+      })
+
+      return NextResponse.json(
+        {
+          verified: false,
+          error: `Verification token mismatch. Found records: ${allTxtValues.join(", ")}. Expected: ${expectedToken}. Please ensure the TXT record value exactly matches the token.`,
+          recordName,
+          expectedToken,
+          foundRecords: allTxtValues,
+        },
+        { status: 400 }
+      )
+    }
+
+    // Verification successful - update status
+    const updated = await prisma.$transaction(async (tx) => {
+      // Update merchant
+      const updatedMerchant = await tx.merchant.update({
         where: { id: merchant.id },
         data: {
           domainStatus: "VERIFIED",
@@ -45,17 +109,26 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      return NextResponse.json({
-        verified: true,
-        merchant: updated,
-        message: "Domain verification successful (mock)",
+      // Update domain claim
+      await tx.domainClaim.updateMany({
+        where: {
+          domain: domain,
+          merchantId: merchant.id,
+          status: "PENDING",
+        },
+        data: {
+          status: "VERIFIED",
+          verifiedAt: new Date(),
+        },
       })
-    }
+
+      return updatedMerchant
+    })
 
     return NextResponse.json({
-      verified: false,
-      merchant,
-      message: "Verification failed",
+      verified: true,
+      merchant: updated,
+      message: "Domain verification successful. Your domain is now verified and ready to use.",
     })
   } catch (error: any) {
     console.error("Verify domain error:", error)

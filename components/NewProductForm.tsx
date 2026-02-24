@@ -14,7 +14,7 @@ import { createProduct } from "@/app/actions/products"
 import { useToast } from "@/hooks/use-toast"
 import { Plus, X, Loader2 } from "lucide-react"
 import Image from "next/image"
-import { uploadToCloudinary } from "@/lib/cloudinary"
+import { uploadImage } from "@/lib/uploads/uploadImage"
 
 interface ImageState {
   url: string
@@ -67,16 +67,8 @@ export function NewProductForm({ isGstRegistered }: NewProductFormProps) {
     filesArray.forEach((file, fileIndex) => {
       const uploadId = placeholders[fileIndex].uploadId!
 
-      uploadToCloudinary(file, (progress) => {
-        setImages((prev) => {
-          const updated = [...prev]
-          const img = updated.find((i) => i.uploadId === uploadId)
-          if (img) {
-            img.uploadProgress = progress
-          }
-          return [...updated]
-        })
-      })
+      // Upload using shared utility
+      uploadImage(file, "product")
         .then((result) => {
           setImages((prev) => {
             const updated = [...prev]
@@ -84,6 +76,7 @@ export function NewProductForm({ isGstRegistered }: NewProductFormProps) {
             if (img) {
               img.url = result.url
               img.uploading = false
+              img.uploadProgress = 100
               delete img.uploadId
             }
             return [...updated]
@@ -91,12 +84,10 @@ export function NewProductForm({ isGstRegistered }: NewProductFormProps) {
         })
         .catch((error) => {
           console.error("Upload error:", error)
+          const errorMessage = error instanceof Error ? error.message : `Failed to upload ${file.name}`
           toast({
             title: "Upload failed",
-            description:
-              error instanceof Error
-                ? error.message
-                : `Failed to upload ${file.name}`,
+            description: errorMessage,
             variant: "destructive",
           })
           // Remove failed upload

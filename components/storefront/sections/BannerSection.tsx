@@ -1,3 +1,5 @@
+"use client"
+
 interface BannerSectionProps {
   text: string
   link?: string

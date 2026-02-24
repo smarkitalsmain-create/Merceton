@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
@@ -20,17 +20,19 @@ export async function POST(
   { params }: { params: { orderId: string } }
 ) {
   try {
-    const { userId } = auth()
-    if (!userId) {
+    const supabase = createSupabaseServerClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    
+    if (error || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { authUserId: userId },
+    const dbUser = await prisma.user.findUnique({
+      where: { authUserId: user.id },
       include: { merchant: true },
     })
 
-    if (!user?.merchant) {
+    if (!dbUser?.merchant) {
       return NextResponse.json({ error: "Merchant not found" }, { status: 403 })
     }
 
@@ -48,7 +50,7 @@ export async function POST(
     const order = await prisma.order.findFirst({
       where: {
         id: params.orderId,
-        merchantId: user.merchant.id,
+        merchantId: dbUser.merchant.id,
       },
       include: {
         shipments: true,
@@ -132,6 +134,38 @@ export async function POST(
 
       return updatedOrder
     })
+
+    // Email trigger: Shipment update (non-blocking)
+    // Send shipment notification when order stage transitions to SHIPPED
+    if (currentStage !== "SHIPPED" && targetStage === "SHIPPED") {
+      try {
+        const shipment = await prisma.shipment.findFirst({
+          where: { orderId: order.id },
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (shipment && order.customerEmail && order.customerEmail.trim()) {
+          const { sendShipmentUpdateEmail } = await import("@/lib/email/notifications");
+          const merchant = await prisma.merchant.findUnique({
+            where: { id: order.merchantId },
+            select: { displayName: true },
+          });
+
+          await sendShipmentUpdateEmail({
+            to: order.customerEmail,
+            customerName: order.customerName,
+            orderId: order.id, // Internal ID for tracking
+            orderNumber: order.orderNumber, // Human-readable for display
+            carrier: shipment.courierName,
+            trackingId: shipment.awb,
+            trackingUrl: shipment.trackingUrl || undefined,
+            storeName: merchant?.displayName,
+          });
+        }
+      } catch (emailError) {
+        console.error("[email] Failed to send shipment update:", emailError);
+      }
+    }
 
     return NextResponse.json({ order: updated })
   } catch (error: any) {

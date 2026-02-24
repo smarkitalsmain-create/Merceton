@@ -1,14 +1,26 @@
 import { requireMerchant } from "@/lib/auth"
-import { getMerchantOnboarding } from "@/lib/onboarding"
+import { getOrCreateOnboarding } from "@/lib/services/onboarding.service"
 import { redirect } from "next/navigation"
 import { OnboardingForm } from "@/components/OnboardingForm"
 
 export default async function OnboardingPage() {
   const merchant = await requireMerchant()
-  const onboarding = await getMerchantOnboarding(merchant.id)
+  
+  // Get or create onboarding record
+  const onboarding = await getOrCreateOnboarding(merchant.id)
 
-  // If already completed, redirect to dashboard
+  // DEV-only log
+  if (process.env.NODE_ENV === "development") {
+    console.log("[onboarding page] Onboarding status:", onboarding.onboardingStatus)
+    console.log("[onboarding page] Profile completion:", onboarding.profileCompletionPercent)
+  }
+
+  // CRITICAL: If already completed, immediately redirect to dashboard
+  // This server-side redirect prevents the onboarding form from rendering
   if (onboarding.onboardingStatus === "COMPLETED") {
+    if (process.env.NODE_ENV === "development") {
+      console.log("[onboarding page] Onboarding already completed, redirecting to /dashboard")
+    }
     redirect("/dashboard")
   }
 

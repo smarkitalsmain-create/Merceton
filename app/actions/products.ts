@@ -20,6 +20,15 @@ export async function createProduct(data: CreateProductData) {
     // Authorize and get merchant
     const { merchant } = await authorizeRequest()
 
+    // Block actions when merchant account is on hold
+    const merchantRecord = await prisma.merchant.findUnique({
+      where: { id: merchant.id },
+      select: { accountStatus: true },
+    })
+    if (merchantRecord?.accountStatus === "ON_HOLD") {
+      return { success: false, error: "Account under review. Product creation is temporarily disabled." }
+    }
+
     // Get merchant onboarding to check GST status
     const onboarding = await getMerchantOnboarding(merchant.id)
 
@@ -95,6 +104,15 @@ export async function updateProduct(data: UpdateProductData) {
   try {
     // Authorize and get merchant
     const { merchant } = await authorizeRequest()
+
+    // Block actions when merchant account is on hold
+    const merchantRecord = await prisma.merchant.findUnique({
+      where: { id: merchant.id },
+      select: { accountStatus: true },
+    })
+    if (merchantRecord?.accountStatus === "ON_HOLD") {
+      return { success: false, error: "Account under review. Product updates are temporarily disabled." }
+    }
 
     // Validate data
     const validated = updateProductSchema.parse(data)

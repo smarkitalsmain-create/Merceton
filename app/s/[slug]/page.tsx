@@ -9,16 +9,62 @@ import Image from "next/image"
 import { z } from "zod"
 import { StorefrontHeader } from "@/components/StorefrontHeader"
 import { CustomCodeStorefront } from "@/components/CustomCodeStorefront"
-import { HeroSection } from "@/components/storefront/sections/HeroSection"
-import { TextSection } from "@/components/storefront/sections/TextSection"
-import { ProductGridSection } from "@/components/storefront/sections/ProductGridSection"
-import { BannerSection } from "@/components/storefront/sections/BannerSection"
-import { FooterSection } from "@/components/storefront/sections/FooterSection"
+import { MaintenanceMode } from "@/components/MaintenanceMode"
+import { SectionRenderer } from "@/components/storefront/SectionRenderer"
+import { StorefrontFooter } from "@/components/storefront/StorefrontFooter"
+import { getPublishedStorefrontConfig, getDraftStorefrontConfig } from "@/lib/storefront/core/config/getConfig"
+import { themeToCssVars } from "@/lib/storefront/core/css-vars"
+import type { Metadata } from "next"
 
+// Generate metadata from storefront SEO config (safe - uses optional chaining)
+export async function generateMetadata({
+  params,
+}: {
+  params: { slug: string }
+}): Promise<Metadata> {
+  const merchant = await prisma.merchant.findUnique({
+    where: { slug: params.slug, isActive: true },
+    select: { id: true, displayName: true },
+  })
+
+  if (!merchant) {
+    return {}
+  }
+
+  // Get published config for metadata (normalized - always has seo)
+  const config = await getPublishedStorefrontConfig(merchant.id)
+  
+  // Safe access with fallbacks (defensive even though config.seo is guaranteed)
+  const metaTitle = config?.seo?.metaTitle || config?.branding?.storeDisplayName || merchant.displayName
+  const metaDescription = config?.seo?.metaDescription || ""
+  const metaKeywords = config?.seo?.metaKeywords || ""
+  const ogImage = config?.seo?.ogImage || config?.branding?.banner || null
+
+  return {
+    title: metaTitle || merchant.displayName,
+    description: metaDescription || undefined,
+    keywords: metaKeywords || undefined,
+    openGraph: {
+      title: metaTitle || merchant.displayName,
+      description: metaDescription || undefined,
+      images: ogImage ? [{ url: ogImage }] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: metaTitle || merchant.displayName,
+      description: metaDescription || undefined,
+      images: config?.seo?.twitterCardImage ? [config.seo.twitterCardImage] : ogImage ? [ogImage] : undefined,
+    },
+  }
+}
+
+// Legacy schema for backward compatibility - footer is now separate
 const SectionSchema = z.discriminatedUnion("type", [
   z.object({
     id: z.string(),
     type: z.literal("hero"),
+    order: z.number().optional(),
+    isVisible: z.boolean().optional(),
     settings: z.object({
       headline: z.string(),
       subheadline: z.string().optional(),
@@ -29,6 +75,8 @@ const SectionSchema = z.discriminatedUnion("type", [
   z.object({
     id: z.string(),
     type: z.literal("text"),
+    order: z.number().optional(),
+    isVisible: z.boolean().optional(),
     settings: z.object({
       title: z.string(),
       body: z.string(),
@@ -37,6 +85,8 @@ const SectionSchema = z.discriminatedUnion("type", [
   z.object({
     id: z.string(),
     type: z.literal("productGrid"),
+    order: z.number().optional(),
+    isVisible: z.boolean().optional(),
     settings: z.object({
       title: z.string(),
       collection: z.enum(["all", "featured"]),
@@ -46,14 +96,19 @@ const SectionSchema = z.discriminatedUnion("type", [
   z.object({
     id: z.string(),
     type: z.literal("banner"),
+    order: z.number().optional(),
+    isVisible: z.boolean().optional(),
     settings: z.object({
       text: z.string(),
       link: z.string().optional(),
     }),
   }),
+  // Footer is deprecated but kept for migration
   z.object({
     id: z.string(),
     type: z.literal("footer"),
+    order: z.number().optional(),
+    isVisible: z.boolean().optional(),
     settings: z.object({
       brandName: z.string(),
       links: z
@@ -88,6 +143,7 @@ export default async function StorePage({
       slug: true,
       displayName: true,
       isActive: true,
+      accountStatus: true,
     },
   })
 
@@ -96,6 +152,25 @@ export default async function StorePage({
   }
 
   const isPreview = searchParams?.preview === "true"
+
+  // Preview route must be protected by merchant ownership
+  if (isPreview) {
+    const { createSupabaseServerClient } = await import("@/lib/supabase/server")
+    const supabase = createSupabaseServerClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    
+    if (error || !user) {
+      notFound() // Don't reveal preview exists to unauthenticated users
+    }
+    // Verify merchant ownership
+    const userMerchant = await prisma.user.findUnique({
+      where: { authUserId: user.id },
+      select: { merchantId: true },
+    })
+    if (!userMerchant || userMerchant.merchantId !== merchant.id) {
+      notFound() // Don't reveal preview exists to unauthorized users
+    }
+  }
 
   // Try section-based storefront page first
   const page = await prisma.storefrontPage.findUnique({
@@ -106,6 +181,22 @@ export default async function StorePage({
       },
     },
   })
+
+  // Fetch store settings to check if store is live
+  const storeSettings = await prisma.merchantStoreSettings.findUnique({
+    where: { merchantId: merchant.id },
+    select: {
+      isStoreLive: true,
+      storeName: true,
+      logoUrl: true,
+    },
+  })
+
+  // Check if store is live (default to true if settings don't exist)
+  const isStoreLive = storeSettings?.isStoreLive ?? true
+  if (!isStoreLive || merchant.accountStatus === "ON_HOLD") {
+    return <MaintenanceMode storeName={storeSettings?.storeName || merchant.displayName} />
+  }
 
   // Fetch storefront settings separately - read-only, no upsert (legacy theme/custom code)
   const storefront = await prisma.storefrontSettings.findUnique({
@@ -122,6 +213,10 @@ export default async function StorePage({
     },
   })
 
+  // Use store settings logo if available, otherwise fallback to storefront logo
+  const logoUrl = storeSettings?.logoUrl || storefront?.logoUrl || null
+  const storeName = storeSettings?.storeName || merchant.displayName
+
   // Fetch products separately for better performance
   const products = await prisma.product.findMany({
     where: {
@@ -137,73 +232,49 @@ export default async function StorePage({
     orderBy: { createdAt: "desc" },
   })
 
-  // If we have a section-based page and it's either published or in preview, render it
+  // If we have a section-based page:
+  // - In preview: always render (merchant ownership verified above) using draft config
+  // - Not in preview: only render if published, using published config
   if (page && (isPreview || page.isPublished)) {
-    const parsed = LayoutSchema.safeParse(page.layoutJson)
+    const config = isPreview
+      ? await getDraftStorefrontConfig(merchant.id)
+      : await getPublishedStorefrontConfig(merchant.id)
+    
+    if (!config) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <h1 className="text-2xl font-bold">Store Not Published</h1>
+            <p className="text-muted-foreground">
+              This storefront is not available yet. Please check back later.
+            </p>
+          </div>
+        </div>
+      )
+    }
 
-    const sections = parsed.success ? parsed.data.sections : []
+    const themeVars = themeToCssVars(config.theme)
+    const displayName = config.branding.storeDisplayName || storeName
+    const displayLogo = config.branding.logo || logoUrl
 
     return (
-      <div className="min-h-screen bg-background">
+      <div id="storefront-root" className="min-h-screen flex flex-col" style={themeVars}>
+        {config.theme.customCss && (
+          <style dangerouslySetInnerHTML={{ __html: config.theme.customCss }} />
+        )}
         <StorefrontHeader
           storeSlug={merchant.slug}
-          storeName={merchant.displayName}
-          logoUrl={storefront?.logoUrl || null}
+          storeName={displayName}
+          logoUrl={displayLogo}
         />
-        <main>
-          {sections.map((section) => {
-            switch (section.type) {
-              case "hero":
-                return (
-                  <HeroSection
-                    key={section.id}
-                    headline={section.settings.headline}
-                    subheadline={section.settings.subheadline}
-                    ctaText={section.settings.ctaText}
-                    ctaLink={section.settings.ctaLink}
-                  />
-                )
-              case "text":
-                return (
-                  <TextSection
-                    key={section.id}
-                    title={section.settings.title}
-                    body={section.settings.body}
-                  />
-                )
-              case "productGrid": {
-                const limitedProducts = products.slice(0, section.settings.limit)
-                if (limitedProducts.length === 0) return null
-                return (
-                  <ProductGridSection
-                    key={section.id}
-                    storeSlug={merchant.slug}
-                    title={section.settings.title}
-                    products={limitedProducts}
-                  />
-                )
-              }
-              case "banner":
-                return (
-                  <BannerSection
-                    key={section.id}
-                    text={section.settings.text}
-                    link={section.settings.link}
-                  />
-                )
-              case "footer":
-                return (
-                  <FooterSection
-                    key={section.id}
-                    brandName={section.settings.brandName}
-                    links={section.settings.links}
-                  />
-                )
-              default:
-                return null
-            }
-          })}
-        </main>
+          <main className="flex-1">
+            <SectionRenderer
+              sections={config.layout.sections}
+              storeSlug={merchant.slug}
+              products={products}
+            />
+          </main>
+        <StorefrontFooter branding={config.branding} />
       </div>
     )
   }
@@ -238,9 +309,10 @@ export default async function StorePage({
   return renderThemeStorefront(
     merchant,
     products,
-    storefront.logoUrl,
+    logoUrl,
     storefront.themeConfig,
-    storefront.theme
+    storefront.theme,
+    storeName
   )
 }
 
@@ -258,11 +330,12 @@ function renderThemeStorefront(
   }>,
   logoUrl: string | null,
   themeConfig: any,
-  theme: string | null
+  theme: string | null,
+  storeName: string
 ) {
   // Safe access to themeConfig with fallbacks
   const config = themeConfig && typeof themeConfig === "object" ? themeConfig : {}
-  const storeTitle = merchant.displayName
+  const storeTitle = storeName
   const primaryColor = (config.primaryColor as string) || "#000000"
   const headingFont = (config.headingFont as string) || "Inter"
   const buttonStyle = (config.buttonStyle as string) || "rounded"
@@ -294,7 +367,7 @@ function renderThemeStorefront(
       <div className="min-h-screen bg-background">
         <StorefrontHeader
           storeSlug={merchant.slug}
-          storeName={storeTitle}
+          storeName={storeName}
           logoUrl={logoUrl}
         />
 

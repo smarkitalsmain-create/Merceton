@@ -1,26 +1,43 @@
 import { redirect } from "next/navigation"
-import { auth } from "@clerk/nextjs/server"
 import { requireMerchant } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
 import { getMerchantOnboarding } from "@/lib/onboarding"
 import { DashboardSidebar } from "@/components/DashboardSidebar"
-import { UserButton } from "@clerk/nextjs"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { OnboardingGate } from "@/components/OnboardingGate"
+import { createSupabaseServerReadonlyClient } from "@/lib/supabase/server-readonly"
+import { DashboardUserMenu } from "@/components/DashboardUserMenu"
+import { MerchantStatusBanner } from "@/components/dashboard/MerchantStatusBanner"
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  // Get authenticated user
-  const { userId } = auth()
-  if (!userId) {
+  // Supabase auth: get current user (readonly - no cookie writes)
+  const supabase = createSupabaseServerReadonlyClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
     redirect("/sign-in")
   }
 
   // This will redirect to onboarding/create-store if no merchant
   const merchant = await requireMerchant()
+
+  // Fetch merchant status for banner
+  const dbMerchant = await prisma.merchant.findUnique({
+    where: { id: merchant.id },
+    select: {
+      accountStatus: true,
+      kycStatus: true,
+      holdReasonCode: true,
+      holdReasonText: true,
+    },
+  })
 
   // Check onboarding status - enforce completion for all dashboard routes except onboarding itself
   const onboarding = await getMerchantOnboarding(merchant.id)
@@ -39,10 +56,20 @@ export default async function DashboardLayout({
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <UserButton afterSignOutUrl="/" />
+                  <DashboardUserMenu />
                 </div>
               </header>
-              <main className="flex-1 overflow-y-auto p-6">{children}</main>
+              <main className="flex-1 overflow-y-auto p-6">
+                {dbMerchant && (
+                  <MerchantStatusBanner
+                    accountStatus={dbMerchant.accountStatus}
+                    kycStatus={dbMerchant.kycStatus}
+                    holdReasonCode={dbMerchant.holdReasonCode}
+                    holdReasonText={dbMerchant.holdReasonText}
+                  />
+                )}
+                {children}
+              </main>
             </div>
           </div>
           <Toaster />

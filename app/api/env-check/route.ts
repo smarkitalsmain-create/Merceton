@@ -4,6 +4,7 @@ export async function GET() {
   return NextResponse.json({
     DATABASE_URL: !!process.env.DATABASE_URL,
     DIRECT_URL: !!process.env.DIRECT_URL,
+    SHADOW_DATABASE_URL: !!process.env.SHADOW_DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
   })
 }

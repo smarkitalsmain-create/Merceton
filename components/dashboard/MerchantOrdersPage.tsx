@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useState, useTransition, useCallback } from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
@@ -115,7 +115,7 @@ export function MerchantOrdersPage() {
     setDateTo(sTo)
   }, [searchParams])
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams()
@@ -147,12 +147,12 @@ export function MerchantOrdersPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [stageFilter, paymentFilter, q, dateFrom, dateTo, toast])
 
   useEffect(() => {
     // Fetch on mount and whenever filters change
     fetchOrders()
-  }, [stageFilter, paymentFilter, q, dateFrom, dateTo])
+  }, [fetchOrders])
 
   const applyFiltersToUrl = () => {
     const params = new URLSearchParams()
@@ -465,6 +465,11 @@ export function MerchantOrdersPage() {
                             <Link href={`/dashboard/orders/${order.id}`}>
                               <Button variant="outline" size="sm" className="h-8 px-2 text-xs">
                                 View
+                              </Button>
+                            </Link>
+                            <Link href={`/dashboard/orders/${order.id}/invoice`} target="_blank">
+                              <Button variant="outline" size="sm" className="h-8 px-2 text-xs">
+                                Invoice
                               </Button>
                             </Link>
                             {order.stage !== "CANCELLED" &&

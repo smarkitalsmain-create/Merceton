@@ -1,114 +1,22 @@
-import { auth, currentUser } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
+import { createSupabaseAdminServerReadonlyClient } from "@/lib/supabase/admin-server-readonly"
+import { isEmailInAllowlist } from "@/lib/admin-allowlist"
+import { prisma } from "@/lib/prisma"
 
 /**
- * Get the list of platform admin emails from environment variable
- * Format: comma-separated list of email addresses
- * Example: SELLARITY_ADMIN_EMAILS="admin1@example.com,admin2@example.com"
- */
-function getAdminEmails(): string[] {
-  const emails = process.env.SELLARITY_ADMIN_EMAILS
-  if (!emails) {
-    return []
-  }
-  return emails
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean)
-}
-
-/**
- * Get the list of super admin user IDs from environment variable
- * Format: comma-separated list of Clerk user IDs
- * Example: SUPER_ADMIN_USER_IDS="user_xxx,user_yyy"
- */
-function getSuperAdminUserIds(): string[] {
-  const userIds = process.env.SUPER_ADMIN_USER_IDS
-  if (!userIds) {
-    return []
-  }
-  return userIds
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean)
-}
-
-/**
- * Get the list of admin user IDs from environment variable
- * Format: comma-separated list of Clerk user IDs
- * Example: ADMIN_USER_IDS="user_xxx,user_yyy"
- */
-function getAdminUserIds(): string[] {
-  const userIds = process.env.ADMIN_USER_IDS
-  if (!userIds) {
-    return []
-  }
-  return userIds
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean)
-}
-
-/**
- * Check if the current user is a platform admin (email-based)
- */
-export async function isPlatformAdmin(): Promise<boolean> {
-  const { userId } = auth()
-  if (!userId) {
-    return false
-  }
-
-  const clerkUser = await currentUser()
-  if (!clerkUser) {
-    return false
-  }
-
-  const primaryEmail = clerkUser.emailAddresses?.[0]?.emailAddress
-  if (!primaryEmail) {
-    return false
-  }
-
-  const adminEmails = getAdminEmails()
-  return adminEmails.includes(primaryEmail.toLowerCase())
-}
-
-/**
- * Check if the current user is a super admin (user ID-based)
+ * Check if the current user is a super admin (email-based)
  */
 export async function isSuperAdmin(): Promise<boolean> {
-  const { userId } = auth()
-  if (!userId) {
+  const supabase = createSupabaseAdminServerReadonlyClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user?.email) {
     return false
   }
 
-  const superAdminIds = getSuperAdminUserIds()
-  return superAdminIds.includes(userId)
-}
-
-/**
- * Check if the current user is an admin (user ID-based, includes super admins)
- */
-export async function isAdmin(): Promise<boolean> {
-  const { userId } = auth()
-  if (!userId) {
-    return false
-  }
-
-  const adminIds = getAdminUserIds()
-  const superAdminIds = getSuperAdminUserIds()
-  return adminIds.includes(userId) || superAdminIds.includes(userId)
-}
-
-/**
- * Require platform admin access - redirects to /dashboard if not admin
- * Use this in admin pages and API routes
- */
-export async function requirePlatformAdmin() {
-  const isAdmin = await isPlatformAdmin()
-  if (!isAdmin) {
-    redirect("/dashboard")
-  }
-  return true
+  return isEmailInAllowlist(user.email)
 }
 
 /**
@@ -120,83 +28,94 @@ export async function requireSuperAdmin(): Promise<{
   email: string
   name: string | null
 }> {
-  const isSuper = await isSuperAdmin()
+  const supabase = createSupabaseAdminServerReadonlyClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/admin/sign-in")
+  }
+
+  const isSuper = !!isEmailInAllowlist(user.email)
+
   if (!isSuper) {
     redirect("/dashboard")
   }
 
-  const actor = await getAdminIdentity()
-  if (!actor) {
-    redirect("/dashboard")
+  return {
+    userId: user.id,
+    email: user.email ?? "",
+    name: user.user_metadata?.name ?? user.user_metadata?.full_name ?? null,
   }
-
-  return actor
 }
 
 /**
- * Require admin access (admin or super admin) - redirects to /dashboard if not admin
- * Use this for general admin operations
+ * Require admin access (platform admin - email allowlist based)
+ * Throws error with message "UNAUTHORIZED" or "FORBIDDEN" for API routes to catch
+ * For page routes, use requireSuperAdmin() which redirects
  */
-export async function requireAdmin() {
-  const isAdminUser = await isAdmin()
-  if (!isAdminUser) {
-    redirect("/dashboard")
-  }
-  return true
-}
-
-/**
- * Get platform admin identity (userId, email, name)
- * Returns null if not a platform admin
- */
-export async function getPlatformAdminIdentity(): Promise<{
+export async function requireAdmin(): Promise<{
   userId: string
   email: string
   name: string | null
-} | null> {
-  const isAdmin = await isPlatformAdmin()
-  if (!isAdmin) {
-    return null
+}> {
+  const supabase = createSupabaseAdminServerReadonlyClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    const error = new Error("UNAUTHORIZED")
+    ;(error as any).status = 401
+    throw error
   }
 
-  const { userId } = auth()
-  if (!userId) {
-    return null
+  const dbUser = await prisma.user.findUnique({
+    where: { authUserId: user.id },
+    select: { email: true },
+  })
+
+  if (!dbUser || !isEmailInAllowlist(dbUser.email)) {
+    const error = new Error("FORBIDDEN")
+    ;(error as any).status = 403
+    throw error
   }
 
-  const clerkUser = await currentUser()
-  if (!clerkUser) {
-    return null
+  return {
+    userId: user.id,
+    email: user.email ?? dbUser.email ?? "",
+    name: user.user_metadata?.name ?? user.user_metadata?.full_name ?? null,
   }
-
-  const email = clerkUser.emailAddresses?.[0]?.emailAddress || ""
-  const name =
-    `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim() || null
-
-  return { userId, email, name }
 }
 
 /**
- * Get admin identity (for audit logging)
+ * Alias for requireAdmin (platform admin)
+ */
+export async function requirePlatformAdmin(): Promise<{
+  userId: string
+  email: string
+  name: string | null
+}> {
+  return requireAdmin()
+}
+
+/**
+ * Get admin identity for audit logging
+ * Returns null if not admin (non-throwing version)
  */
 export async function getAdminIdentity(): Promise<{
   userId: string
   email: string
   name: string | null
 } | null> {
-  const { userId } = auth()
-  if (!userId) {
+  try {
+    return await requireAdmin()
+  } catch {
     return null
   }
-
-  const clerkUser = await currentUser()
-  if (!clerkUser) {
-    return null
-  }
-
-  const email = clerkUser.emailAddresses?.[0]?.emailAddress || ""
-  const name =
-    `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim() || null
-
-  return { userId, email, name }
 }
+
+// Type exports for better typing
+export type AdminUser = Awaited<ReturnType<typeof requireAdmin>>
+export type SuperAdminUser = Awaited<ReturnType<typeof requireSuperAdmin>>

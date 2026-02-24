@@ -1,9 +1,9 @@
-# Sellarity Project File Tree
+# Merceton Project File Tree
 
 ## Project Structure
 
 ```
-sellarity/
+merceton/
 ├── app/                          # Next.js App Router
 │   ├── api/                      # API Routes
 │   │   ├── merchant/

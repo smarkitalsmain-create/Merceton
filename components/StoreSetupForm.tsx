@@ -12,6 +12,15 @@ export default function StoreSetupForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  async function safeJson(res: Response) {
+    const text = await res.text()
+    try {
+      return JSON.parse(text)
+    } catch {
+      throw new Error(text.slice(0, 200) || "Unexpected response from server")
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
@@ -30,7 +39,7 @@ export default function StoreSetupForm() {
       })
 
       if (!res.ok) {
-        const data = await res.json()
+        const data = await safeJson(res)
         throw new Error(data.error || "Failed to create store")
       }
 
@@ -64,7 +73,7 @@ export default function StoreSetupForm() {
           <div className="space-y-2">
             <Label htmlFor="storeSlug">Store URL</Label>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">sellarity.com/store/</span>
+              <span className="text-sm text-muted-foreground">merceton.com/store/</span>
               <Input
                 id="storeSlug"
                 name="storeSlug"

@@ -17,22 +17,26 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { savePanStep, saveGstStep, saveBusinessBasicsStep } from "@/app/actions/onboarding"
+import { savePanStep, saveOnboardingStep, saveBusinessStep, type OnboardingResponse } from "@/app/actions/onboarding"
 import {
   panStepSchema,
   gstStepSchema,
-  businessBasicsStepSchema,
+  gstStepSchemaBase,
+  businessStepSchema,
+  invoiceStepSchema,
   type PanStepData,
   type GstStepData,
-  type BusinessBasicsStepData,
-} from "@/lib/validations/onboarding"
+  type GstWithInvoiceStepData,
+  type BusinessStepData,
+  type InvoiceStepData,
+} from "@/lib/validation/onboarding-steps"
 import { Loader2, CheckCircle2 } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { toDateInputValue } from "@/lib/dateUtils"
 
 interface OnboardingFormProps {
   initialData: {
-    onboardingStatus: string
+    onboardingStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED"
     panType?: string | null
     panNumber?: string | null
     panName?: string | null
@@ -45,6 +49,14 @@ interface OnboardingFormProps {
     gstState?: string | null
     gstComposition?: boolean
     gstNotRegisteredReason?: string | null
+    invoiceAddressLine1?: string | null
+    invoiceAddressLine2?: string | null
+    invoiceCity?: string | null
+    invoicePincode?: string | null
+    invoiceState?: string | null
+    invoicePhone?: string | null
+    invoiceEmail?: string | null
+    invoicePrefix?: string | null
     storeDisplayName?: string | null
     legalBusinessName?: string | null
     yearStarted?: number | null
@@ -61,12 +73,45 @@ type Step = 1 | 2 | 3
 export function OnboardingForm({ initialData }: OnboardingFormProps) {
   const router = useRouter()
   const { toast } = useToast()
+  
+  // Determine initial step based on onboardingStatus and field completion
   const [currentStep, setCurrentStep] = useState<Step>(() => {
-    // Determine current step based on what's completed
-    if (!initialData.panNumber) return 1
-    if (!initialData.gstStatus || initialData.gstStatus === "NOT_REGISTERED" && !initialData.gstNotRegisteredReason) return 2
-    if (!initialData.storeDisplayName || !initialData.primaryCategory) return 3
-    return 1
+    // CRITICAL: If onboarding is already completed, redirect to dashboard (backup guard)
+    if (initialData.onboardingStatus === "COMPLETED") {
+      // Use replace to avoid adding to history
+      if (typeof window !== "undefined") {
+        router.replace("/dashboard")
+      }
+      return 3 // Return step 3 as fallback, but redirect should happen
+    }
+
+    // Step determination logic based on completion status
+    // Step 1: PAN step
+    if (!initialData.panNumber) {
+      return 1
+    }
+
+    // Step 2: GST/Invoice step
+    // Check if GST step is incomplete
+    const gstIncomplete = 
+      !initialData.gstStatus || 
+      (initialData.gstStatus === "NOT_REGISTERED" && !initialData.gstNotRegisteredReason) ||
+      (initialData.gstStatus === "REGISTERED" && (!initialData.gstin || !initialData.gstLegalName || !initialData.gstState))
+    
+    // Check if invoice step is incomplete
+    const invoiceIncomplete = 
+      !initialData.invoiceAddressLine1 || 
+      !initialData.invoiceCity || 
+      !initialData.invoicePincode || 
+      !initialData.invoiceState
+
+    if (gstIncomplete || invoiceIncomplete) {
+      return 2
+    }
+
+    // Step 3: Business Basics step
+    // If all previous steps are complete, go to step 3
+    return 3
   })
   const [isPending, startTransition] = useTransition()
 
@@ -74,6 +119,7 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
   // Form uses string for date input, Zod will coerce to Date on submit
   const panForm = useForm<PanStepData>({
     resolver: zodResolver(panStepSchema),
+    mode: "onChange", // Clear errors as user types
     defaultValues: {
       panType: (initialData.panType as any) || undefined,
       panNumber: initialData.panNumber || "",
@@ -84,9 +130,17 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
     },
   })
 
-  // Step 2: GST Form
-  const gstForm = useForm<GstStepData>({
-    resolver: zodResolver(gstStepSchema),
+  // Step 2: GST Form (includes invoice fields in UI, but validates separately)
+  // Frontend form accepts both GST and invoice fields, backend validates separately
+  // Use combined schema for client-side validation of both GST and invoice fields
+  // Use base schema for merge (ZodEffects can't be merged directly)
+  const gstWithInvoiceSchema = gstStepSchemaBase.merge(invoiceStepSchema)
+  
+  const gstForm = useForm<GstWithInvoiceStepData>({
+    // Use combined schema for client-side validation
+    resolver: zodResolver(gstWithInvoiceSchema),
+    mode: "onChange", // Clear errors as user types
+    reValidateMode: "onChange", // Re-validate on change
     defaultValues: {
       gstStatus: (initialData.gstStatus as any) || "NOT_REGISTERED",
       gstin: initialData.gstin || "",
@@ -95,12 +149,21 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
       gstState: initialData.gstState || "",
       gstComposition: initialData.gstComposition || false,
       gstNotRegisteredReason: initialData.gstNotRegisteredReason || "",
+      invoiceAddressLine1: initialData.invoiceAddressLine1 || "",
+      invoiceAddressLine2: initialData.invoiceAddressLine2 || "",
+      invoiceCity: initialData.invoiceCity || "",
+      invoicePincode: initialData.invoicePincode || "",
+      invoiceState: initialData.invoiceState || "",
+      invoicePhone: initialData.invoicePhone || "",
+      invoiceEmail: initialData.invoiceEmail || "",
+      invoicePrefix: initialData.invoicePrefix || "MRC",
     },
   })
 
   // Step 3: Business Basics Form
-  const businessForm = useForm<BusinessBasicsStepData>({
-    resolver: zodResolver(businessBasicsStepSchema),
+  const businessForm = useForm<BusinessStepData>({
+    resolver: zodResolver(businessStepSchema),
+    mode: "onChange", // Clear errors as user types
     defaultValues: {
       storeDisplayName: initialData.storeDisplayName || "",
       legalBusinessName: initialData.legalBusinessName || "",
@@ -114,63 +177,340 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
   })
 
   const handlePanSubmit = (data: PanStepData) => {
+    // DEV-only log
+    if (process.env.NODE_ENV === "development") {
+      console.log("[onboarding] Save & Continue clicked - PAN step")
+      console.log("[onboarding] Validated data:", data)
+    }
+
     startTransition(async () => {
-      const result = await savePanStep(data)
-      if (result.success) {
-        toast({
-          title: "PAN details saved",
-          description: "Step 1 completed successfully.",
-        })
-        setCurrentStep(2)
-      } else {
+      // DEV-only log
+      if (process.env.NODE_ENV === "development") {
+        console.log("[onboarding] Sending payload to savePanStep:", data)
+      }
+
+      try {
+        const result = await savePanStep(data)
+
+        // DEV-only log
+        if (process.env.NODE_ENV === "development") {
+          console.log("[onboarding] API response status: success =", result.success)
+          console.log("[onboarding] API response data:", result)
+        }
+
+        // Handle response based on success flag
+        if (result.success) {
+          // Success path - never show "Invalid data format"
+          toast({
+            title: "PAN details saved",
+            description: "Step 1 completed successfully.",
+          })
+          setCurrentStep(2)
+        } else {
+          // Error path - handle field errors and show appropriate message
+          // Handle field-level errors from server
+          if (result.fieldErrors) {
+            for (const [field, message] of Object.entries(result.fieldErrors)) {
+              panForm.setError(field as keyof PanStepData, {
+                type: "server",
+                message,
+              })
+            }
+          }
+          // Show toast with appropriate message
+          if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
+            toast({
+              title: "Please fix highlighted fields",
+              description: "Check the fields marked in red below",
+              variant: "destructive",
+            })
+          } else {
+            // Never show "Invalid data format" - replace with user-friendly message
+            const errorMessage = result.error || "Failed to save PAN details"
+            const displayMessage = errorMessage.includes("Invalid data format")
+              ? "Validation failed. Please check all fields and try again."
+              : errorMessage
+            toast({
+              title: "Error",
+              description: displayMessage,
+              variant: "destructive",
+            })
+          }
+        }
+      } catch (error) {
+        // DEV-only log
+        if (process.env.NODE_ENV === "development") {
+          console.error("[onboarding] Error calling savePanStep:", error)
+        }
+        // Never show "Invalid data format" - show actual error or generic message
+        const errorMessage = error instanceof Error ? error.message : "Failed to save PAN details"
         toast({
           title: "Error",
-          description: result.error || "Failed to save PAN details",
+          description: errorMessage.includes("Invalid data format") 
+            ? "Validation failed. Please check the fields below."
+            : errorMessage,
           variant: "destructive",
         })
       }
     })
   }
 
-  const handleGstSubmit = (data: GstStepData) => {
+  // Handle client-side validation errors
+  const handlePanSubmitError = (errors: any) => {
+    // DEV-only log
+    if (process.env.NODE_ENV === "development") {
+      console.log("[onboarding] Client-side validation failed - preventing API call")
+      console.log("[onboarding] Validation errors:", errors)
+    }
+
+    // React Hook Form already sets errors on fields, map them properly
+    const errorFields = Object.keys(errors)
+    if (errorFields.length > 0) {
+      // Map errors to form fields for better UX
+      for (const [field, error] of Object.entries(errors)) {
+        if (error && typeof error === "object" && "message" in error) {
+          panForm.setError(field as keyof PanStepData, {
+            type: "validation",
+            message: (error as any).message || "Invalid value",
+          })
+        }
+      }
+      
+      toast({
+        title: "Please fix highlighted fields",
+        description: "Check the fields marked in red below",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleGstSubmit = (data: GstWithInvoiceStepData) => {
+    // Extract invoice fields only for invoice step submission
+    const invoicePayload = {
+      invoiceAddressLine1: data.invoiceAddressLine1 || "",
+      invoiceAddressLine2: data.invoiceAddressLine2 || "",
+      invoiceCity: data.invoiceCity || "",
+      invoicePincode: data.invoicePincode || "",
+      invoiceState: data.invoiceState || "",
+      invoicePhone: data.invoicePhone || "",
+      invoiceEmail: data.invoiceEmail || "",
+      invoicePrefix: data.invoicePrefix || "",
+      step: "invoice" as const,
+    }
+
+    // DEV-only log - confirm actual submitted values
+    if (process.env.NODE_ENV === "development") {
+      console.log("[onboarding] Invoice submit - Form values:", gstForm.getValues())
+      console.log("[onboarding] Invoice submit - Validated data:", data)
+      console.log("[onboarding] Invoice submit - Invoice payload:", invoicePayload)
+      console.log("[onboarding] Invoice submit - Payload keys:", Object.keys(invoicePayload))
+    }
+
     startTransition(async () => {
-      const result = await saveGstStep(data)
-      if (result.success) {
-        toast({
-          title: "GST details saved",
-          description: "Step 2 completed successfully.",
-        })
-        setCurrentStep(3)
-      } else {
+      try {
+        // Send invoice payload with step parameter
+        const result = await saveOnboardingStep(invoicePayload)
+
+        // DEV-only log
+        if (process.env.NODE_ENV === "development") {
+          console.log("[onboarding] API response status: success =", result.success)
+          console.log("[onboarding] API response data:", result)
+        }
+
+        // Handle invoice step response
+        if (result.success) {
+          // Success path - proceed to next step
+          toast({
+            title: "Step 2 completed",
+            description: "GST and invoice details saved successfully.",
+          })
+          setCurrentStep(3)
+        } else {
+          // Error path - handle field errors and show appropriate message
+          if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
+            // Map field errors to form fields
+            for (const [field, message] of Object.entries(result.fieldErrors)) {
+              gstForm.setError(field as keyof GstWithInvoiceStepData, {
+                type: "server",
+                message: String(message),
+              })
+            }
+            toast({
+              title: "Please fix highlighted fields",
+              description: result.error || "Check the fields marked in red below",
+              variant: "destructive",
+            })
+          } else {
+            toast({
+              title: "Error",
+              description: result.error || "Failed to save invoice details",
+              variant: "destructive",
+            })
+          }
+        }
+      } catch (error) {
+        // DEV-only log
+        if (process.env.NODE_ENV === "development") {
+          console.error("[onboarding] Error calling saveGstStep:", error)
+        }
+        // Never show "Invalid data format" - show actual error or generic message
+        const errorMessage = error instanceof Error ? error.message : "Failed to save GST details"
         toast({
           title: "Error",
-          description: result.error || "Failed to save GST details",
+          description: errorMessage.includes("Invalid data format") 
+            ? "Validation failed. Please check the fields below."
+            : errorMessage,
           variant: "destructive",
         })
       }
     })
   }
 
-  const handleBusinessSubmit = (data: BusinessBasicsStepData) => {
+  // Handle client-side validation errors
+  const handleGstSubmitError = (errors: any) => {
+    // DEV-only log
+    if (process.env.NODE_ENV === "development") {
+      console.log("[onboarding] Client-side validation failed - preventing API call")
+      console.log("[onboarding] Validation errors:", errors)
+      console.log("[onboarding] Form state errors:", gstForm.formState.errors)
+    }
+
+    // React Hook Form already sets errors on fields, just show toast
+    const errorFields = Object.keys(errors)
+    if (errorFields.length > 0) {
+      // Map errors to form fields for better UX
+      for (const [field, error] of Object.entries(errors)) {
+        if (error && typeof error === "object" && "message" in error) {
+          gstForm.setError(field as keyof GstStepData, {
+            type: "validation",
+            message: (error as any).message || "Invalid value",
+          })
+        }
+      }
+      
+      toast({
+        title: "Please fix highlighted fields",
+        description: "Check the fields marked in red below",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleBusinessSubmit = (data: BusinessStepData) => {
+    // DEV-only log
+    if (process.env.NODE_ENV === "development") {
+      console.log("[onboarding] Save & Continue clicked - Business step")
+      console.log("[onboarding] Validated data:", data)
+    }
+
     startTransition(async () => {
-      const result = await saveBusinessBasicsStep(data)
-      if (result.success) {
-        toast({
-          title: "Onboarding completed!",
-          description: "Your profile is now complete. Redirecting to dashboard...",
-        })
-        setTimeout(() => {
-          router.push("/dashboard")
-          router.refresh()
-        }, 1000)
-      } else {
+      // DEV-only log
+      if (process.env.NODE_ENV === "development") {
+        console.log("[onboarding] Sending payload to saveBusinessBasicsStep:", data)
+      }
+
+      try {
+        const result = await saveBusinessStep(data)
+
+        // DEV-only log
+        if (process.env.NODE_ENV === "development") {
+          console.log("[onboarding] API response status: success =", result.success)
+          console.log("[onboarding] API response data:", result)
+        }
+
+        // Handle response based on success flag
+        if (result.success) {
+          // DEV-only log
+          if (process.env.NODE_ENV === "development") {
+            console.log("[onboarding] Business step completed successfully")
+            console.log("[onboarding] Onboarding status:", result.onboarding?.onboardingStatus)
+          }
+
+          // Success path - immediately redirect to dashboard
+          // Use replace to avoid adding to history and prevent back navigation
+          toast({
+            title: "Onboarding completed!",
+            description: "Your profile is now complete. Redirecting to dashboard...",
+          })
+          
+          // Immediate redirect without setTimeout or refresh
+          router.replace("/dashboard")
+        } else {
+          // Error path - handle field errors and show appropriate message
+          // Handle field-level errors from server
+          if (result.fieldErrors) {
+            for (const [field, message] of Object.entries(result.fieldErrors)) {
+              businessForm.setError(field as keyof BusinessStepData, {
+                type: "server",
+                message,
+              })
+            }
+          }
+          // Show toast with appropriate message
+          if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
+            toast({
+              title: "Please fix highlighted fields",
+              description: "Check the fields marked in red below",
+              variant: "destructive",
+            })
+          } else {
+            // Never show "Invalid data format" - replace with user-friendly message
+            const errorMessage = result.error || "Failed to save business details"
+            const displayMessage = errorMessage.includes("Invalid data format")
+              ? "Validation failed. Please check all fields and try again."
+              : errorMessage
+            toast({
+              title: "Error",
+              description: displayMessage,
+              variant: "destructive",
+            })
+          }
+        }
+      } catch (error) {
+        // DEV-only log
+        if (process.env.NODE_ENV === "development") {
+          console.error("[onboarding] Error calling saveBusinessBasicsStep:", error)
+        }
+        // Never show "Invalid data format" - show actual error or generic message
+        const errorMessage = error instanceof Error ? error.message : "Failed to save business details"
         toast({
           title: "Error",
-          description: result.error || "Failed to save business details",
+          description: errorMessage.includes("Invalid data format") 
+            ? "Validation failed. Please check the fields below."
+            : errorMessage,
           variant: "destructive",
         })
       }
     })
+  }
+
+  // Handle client-side validation errors
+  const handleBusinessSubmitError = (errors: any) => {
+    // DEV-only log
+    if (process.env.NODE_ENV === "development") {
+      console.log("[onboarding] Client-side validation failed - preventing API call")
+      console.log("[onboarding] Validation errors:", errors)
+    }
+
+    // React Hook Form already sets errors on fields, map them properly
+    const errorFields = Object.keys(errors)
+    if (errorFields.length > 0) {
+      // Map errors to form fields for better UX
+      for (const [field, error] of Object.entries(errors)) {
+        if (error && typeof error === "object" && "message" in error) {
+          businessForm.setError(field as keyof BusinessStepData, {
+            type: "validation",
+            message: (error as any).message || "Invalid value",
+          })
+        }
+      }
+      
+      toast({
+        title: "Please fix highlighted fields",
+        description: "Check the fields marked in red below",
+        variant: "destructive",
+      })
+    }
   }
 
   const progress = ((currentStep - 1) / 3) * 100
@@ -198,14 +538,23 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
             <CardDescription>Provide your Permanent Account Number (PAN) information</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={panForm.handleSubmit(handlePanSubmit)} className="space-y-4">
+            <form
+              onSubmit={panForm.handleSubmit(handlePanSubmit, handlePanSubmitError)}
+              className="space-y-4"
+            >
               <div className="space-y-2">
                 <Label htmlFor="panType">PAN Type *</Label>
                 <Select
                   value={panForm.watch("panType")}
                   onValueChange={(value) => panForm.setValue("panType", value as any)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger
+                    className={
+                      panForm.formState.errors.panType
+                        ? "border-destructive focus:ring-destructive"
+                        : ""
+                    }
+                  >
                     <SelectValue placeholder="Select PAN type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -230,7 +579,11 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
                   {...panForm.register("panNumber")}
                   placeholder="ABCDE1234F"
                   maxLength={10}
-                  className="uppercase"
+                  className={`uppercase ${
+                    panForm.formState.errors.panNumber
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : ""
+                  }`}
                   onChange={(e) => {
                     e.target.value = e.target.value.toUpperCase()
                     panForm.setValue("panNumber", e.target.value)
@@ -247,6 +600,11 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
                   id="panName"
                   {...panForm.register("panName")}
                   placeholder="Enter name as per PAN card"
+                  className={
+                    panForm.formState.errors.panName
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : ""
+                  }
                 />
                 {panForm.formState.errors.panName && (
                   <p className="text-sm text-destructive">{panForm.formState.errors.panName.message}</p>
@@ -261,6 +619,11 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
                   id="panDobOrIncorp"
                   type="date"
                   {...panForm.register("panDobOrIncorp")}
+                  className={
+                    panForm.formState.errors.panDobOrIncorp
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : ""
+                  }
                 />
                 {panForm.formState.errors.panDobOrIncorp && (
                   <p className="text-sm text-destructive">{panForm.formState.errors.panDobOrIncorp.message}</p>
@@ -273,6 +636,11 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
                   id="panHolderRole"
                   {...panForm.register("panHolderRole")}
                   placeholder="e.g., Proprietor, Director, Partner"
+                  className={
+                    panForm.formState.errors.panHolderRole
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : ""
+                  }
                 />
                 {panForm.formState.errors.panHolderRole && (
                   <p className="text-sm text-destructive">{panForm.formState.errors.panHolderRole.message}</p>
@@ -304,7 +672,10 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
             <CardDescription>Provide your GST registration information</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={gstForm.handleSubmit(handleGstSubmit)} className="space-y-4">
+            <form
+              onSubmit={gstForm.handleSubmit(handleGstSubmit, handleGstSubmitError)}
+              className="space-y-4"
+            >
               <div className="space-y-2">
                 <Label htmlFor="gstStatus">GST Status *</Label>
                 <Select
@@ -320,7 +691,13 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
                     }
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger
+                    className={
+                      gstForm.formState.errors.gstStatus
+                        ? "border-destructive focus:ring-destructive"
+                        : ""
+                    }
+                  >
                     <SelectValue placeholder="Select GST status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -381,6 +758,11 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
                       id="gstState"
                       {...gstForm.register("gstState")}
                       placeholder="State code or name"
+                      className={
+                        gstForm.formState.errors.gstState
+                          ? "border-destructive focus-visible:ring-destructive"
+                          : ""
+                      }
                     />
                     {gstForm.formState.errors.gstState && (
                       <p className="text-sm text-destructive">{gstForm.formState.errors.gstState.message}</p>
@@ -412,6 +794,198 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
                   />
                 </div>
               )}
+
+              {/* Invoice/Billing Address Section */}
+              <div className="border-t pt-6 mt-6">
+                <h3 className="text-lg font-semibold mb-4">Invoice/Billing Address</h3>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="invoiceAddressLine1">Address Line 1 *</Label>
+                    <Input
+                      id="invoiceAddressLine1"
+                      {...gstForm.register("invoiceAddressLine1", {
+                        onChange: () => {
+                          gstForm.clearErrors("invoiceAddressLine1")
+                        },
+                      })}
+                      placeholder="Street address, building name"
+                      className={
+                        gstForm.formState.errors.invoiceAddressLine1
+                          ? "border-destructive focus-visible:ring-destructive"
+                          : ""
+                      }
+                    />
+                    {gstForm.formState.errors.invoiceAddressLine1 && (
+                      <p className="text-sm text-destructive">
+                        {gstForm.formState.errors.invoiceAddressLine1.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="invoiceAddressLine2">Address Line 2 (Optional)</Label>
+                    <Input
+                      id="invoiceAddressLine2"
+                      {...gstForm.register("invoiceAddressLine2", {
+                        onChange: () => {
+                          gstForm.clearErrors("invoiceAddressLine2")
+                        },
+                      })}
+                      placeholder="Apartment, suite, unit, etc."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="invoiceCity">City *</Label>
+                      <Input
+                        id="invoiceCity"
+                        {...gstForm.register("invoiceCity", {
+                          onChange: () => {
+                            gstForm.clearErrors("invoiceCity")
+                          },
+                        })}
+                        placeholder="City"
+                        className={
+                          gstForm.formState.errors.invoiceCity
+                            ? "border-destructive focus-visible:ring-destructive"
+                            : ""
+                        }
+                      />
+                      {gstForm.formState.errors.invoiceCity && (
+                        <p className="text-sm text-destructive">
+                          {gstForm.formState.errors.invoiceCity.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="invoicePincode">Pincode *</Label>
+                      <Input
+                        id="invoicePincode"
+                        {...gstForm.register("invoicePincode", {
+                          onChange: () => {
+                            gstForm.clearErrors("invoicePincode")
+                          },
+                        })}
+                        placeholder="6 digits"
+                        maxLength={6}
+                        pattern="[0-9]{6}"
+                        className={
+                          gstForm.formState.errors.invoicePincode
+                            ? "border-destructive focus-visible:ring-destructive"
+                            : ""
+                        }
+                      />
+                      {gstForm.formState.errors.invoicePincode && (
+                        <p className="text-sm text-destructive">
+                          {gstForm.formState.errors.invoicePincode.message}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="invoiceState">State *</Label>
+                    <Input
+                      id="invoiceState"
+                      {...gstForm.register("invoiceState", {
+                        onChange: () => {
+                          gstForm.clearErrors("invoiceState")
+                        },
+                      })}
+                      placeholder="State"
+                      className={
+                        gstForm.formState.errors.invoiceState
+                          ? "border-destructive focus-visible:ring-destructive"
+                          : ""
+                      }
+                    />
+                    {gstForm.formState.errors.invoiceState && (
+                      <p className="text-sm text-destructive">
+                        {gstForm.formState.errors.invoiceState.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="invoicePhone">Phone (Optional)</Label>
+                      <Input
+                        id="invoicePhone"
+                        {...gstForm.register("invoicePhone", {
+                          onChange: () => {
+                            gstForm.clearErrors("invoicePhone")
+                          },
+                        })}
+                        placeholder="Phone number"
+                        type="tel"
+                        className={
+                          gstForm.formState.errors.invoicePhone
+                            ? "border-destructive focus-visible:ring-destructive"
+                            : ""
+                        }
+                      />
+                      {gstForm.formState.errors.invoicePhone && (
+                        <p className="text-sm text-destructive">
+                          {gstForm.formState.errors.invoicePhone.message}
+                        </p>
+                      )}
+                    </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="invoiceEmail">Email (Optional)</Label>
+                        <Input
+                          id="invoiceEmail"
+                          {...gstForm.register("invoiceEmail", {
+                            onChange: () => {
+                              gstForm.clearErrors("invoiceEmail")
+                            },
+                          })}
+                          placeholder="email@example.com"
+                          type="email"
+                          className={
+                            gstForm.formState.errors.invoiceEmail
+                              ? "border-destructive focus-visible:ring-destructive"
+                              : ""
+                          }
+                        />
+                        {gstForm.formState.errors.invoiceEmail && (
+                          <p className="text-sm text-destructive">
+                            {gstForm.formState.errors.invoiceEmail.message}
+                          </p>
+                        )}
+                      </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="invoicePrefix">Invoice Number Prefix (Optional)</Label>
+                    <Input
+                      id="invoicePrefix"
+                      {...gstForm.register("invoicePrefix", {
+                        onChange: () => {
+                          gstForm.clearErrors("invoicePrefix")
+                        },
+                      })}
+                      placeholder="MRC"
+                      maxLength={8}
+                      className={
+                        gstForm.formState.errors.invoicePrefix
+                          ? "border-destructive focus-visible:ring-destructive"
+                          : ""
+                      }
+                    />
+                    {gstForm.formState.errors.invoicePrefix && (
+                      <p className="text-sm text-destructive">
+                        {gstForm.formState.errors.invoicePrefix.message}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Prefix for invoice numbers (e.g., MRC-2024-00001). Max 8 characters, alphanumeric only.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <div className="flex justify-between">
                 <Button
@@ -446,7 +1020,10 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
             <CardDescription>Tell us about your business</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={businessForm.handleSubmit(handleBusinessSubmit)} className="space-y-4">
+            <form
+              onSubmit={businessForm.handleSubmit(handleBusinessSubmit, handleBusinessSubmitError)}
+              className="space-y-4"
+            >
               <div className="space-y-2">
                 <Label htmlFor="storeDisplayName">Store Display Name *</Label>
                 <Input

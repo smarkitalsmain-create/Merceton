@@ -10,7 +10,7 @@ export interface CartItem {
   quantity: number
 }
 
-const CART_STORAGE_KEY = "sellarity_cart"
+const CART_STORAGE_KEY = "merceton_cart"
 
 export function useCart(storeSlug: string) {
   const [cart, setCart] = useState<CartItem[]>([])

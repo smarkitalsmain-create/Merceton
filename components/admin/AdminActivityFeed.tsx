@@ -8,7 +8,7 @@ import { ClientDate } from "@/components/ClientDate"
 interface AuditLog {
   id: string
   actorEmail: string | null
-  actionType: string
+  action: string // Changed from actionType to action
   entityType: string
   createdAt: Date
 }
@@ -18,6 +18,9 @@ interface AdminActivityFeedProps {
 }
 
 export function AdminActivityFeed({ logs }: AdminActivityFeedProps) {
+  // Defensive fallback: ensure logs is always an array
+  const normalizedLogs = Array.isArray(logs) ? logs : []
+  
   return (
     <Card>
       <CardHeader>
@@ -26,12 +29,12 @@ export function AdminActivityFeed({ logs }: AdminActivityFeedProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {logs.map((log) => (
+          {normalizedLogs.map((log) => (
             <div key={log.id} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
-                    {log.actionType}
+                    {log.action}
                   </Badge>
                   <span className="text-muted-foreground">{log.entityType}</span>
                 </div>

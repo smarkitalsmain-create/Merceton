@@ -2,20 +2,22 @@ import { prisma } from "@/lib/prisma"
 
 /**
  * Get merchant onboarding data (creates if missing)
+ * Uses upsert to handle race conditions and ensure record exists
  */
 export async function getMerchantOnboarding(merchantId: string) {
-  let onboarding = await prisma.merchantOnboarding.findUnique({
-    where: { merchantId },
+  // Use upsert to atomically create or get existing record
+  // Prevents race conditions from concurrent requests
+  // Invoice fields are optional - only create minimal record, update invoice fields when user submits invoice step
+  const onboarding = await prisma.merchantOnboarding.upsert({
+    where: { merchantId }, // merchantId is unique, so we can use it directly
+    update: {}, // No updates needed if record exists
+    create: {
+      merchantId,
+      onboardingStatus: "NOT_STARTED",
+      profileCompletionPercent: 0,
+      // Invoice fields are optional - omit on create, will be populated during invoice step
+    },
   })
-
-  if (!onboarding) {
-    onboarding = await prisma.merchantOnboarding.create({
-      data: {
-        merchantId,
-        onboardingStatus: "NOT_STARTED",
-      },
-    })
-  }
 
   return onboarding
 }

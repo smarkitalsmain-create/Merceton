@@ -55,12 +55,20 @@ export default async function ProductsPage({
           <h1 className="text-3xl font-bold">Products</h1>
           <p className="text-muted-foreground">Manage your product catalog</p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/products/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Product
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/products/import">
+              <Package className="mr-2 h-4 w-4" />
+              Import CSV
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/products/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Product
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <ProductsList initialProducts={products} searchParams={searchParams} />

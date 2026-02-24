@@ -82,7 +82,7 @@ export default function PaymentForm({ order, payment }: PaymentFormProps) {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: amount,
         currency: "INR",
-        name: "Sellarity",
+        name: "Merceton",
         description: `Order ${order.orderNumber}`,
         order_id: razorpayOrderId,
         handler: async function (response: any) {

@@ -1,8 +1,11 @@
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireMerchant } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { normalizeDomain, isValidDomainFormat, getVerificationRecordName } from "@/lib/domains/normalize"
 import crypto from "crypto"
 
 export async function POST(request: NextRequest) {
@@ -18,24 +21,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Normalize domain: lowercase, trim, remove protocol, remove www, remove trailing slash
-    let normalized = customDomain.trim().toLowerCase()
-    normalized = normalized.replace(/^https?:\/\//, "") // Remove protocol
-    normalized = normalized.replace(/^www\./, "") // Remove www
-    normalized = normalized.replace(/\/$/, "") // Remove trailing slash
-    normalized = normalized.split("/")[0] // Remove path if any
-
-    // Basic validation
-    if (!normalized || normalized.length === 0) {
+    // Normalize domain
+    let normalized: string
+    try {
+      normalized = normalizeDomain(customDomain)
+    } catch (error: any) {
       return NextResponse.json(
         { error: "Invalid domain format" },
         { status: 400 }
       )
     }
 
+    // Validate domain format
+    if (!isValidDomainFormat(normalized)) {
+      return NextResponse.json(
+        { error: "Invalid domain format. Please enter a valid domain (e.g., example.com)" },
+        { status: 400 }
+      )
+    }
+
     // Prevent using platform domain
     const platformDomains = process.env.PLATFORM_DOMAINS?.split(",").map((d) =>
-      d.trim().toLowerCase().replace(/^www\./, "")
+      normalizeDomain(d.trim())
     ) || ["localhost", "127.0.0.1"]
     
     if (platformDomains.includes(normalized)) {
@@ -45,8 +52,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if domain is already taken by another merchant
-    const existing = await prisma.merchant.findFirst({
+    // Check if domain is already taken by another merchant (using unique constraint)
+    const existing = await prisma.merchant.findUnique({
       where: { customDomain: normalized },
     })
 
@@ -57,38 +64,64 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate verification token (random string)
+    // Generate verification token (32 character hex string)
     const token = crypto.randomBytes(16).toString("hex")
 
-    // Update merchant
-    const updated = await prisma.merchant.update({
-      where: { id: merchant.id },
-      data: {
-        customDomain: normalized,
-        domainStatus: "PENDING",
-        domainVerificationToken: token,
-        domainVerifiedAt: null,
-      },
-      select: {
-        id: true,
-        customDomain: true,
-        domainStatus: true,
-        domainVerificationToken: true,
-        domainVerifiedAt: true,
-      },
+    // Update merchant in transaction with domain claim
+    const updated = await prisma.$transaction(async (tx) => {
+      // Update merchant
+      const updatedMerchant = await tx.merchant.update({
+        where: { id: merchant.id },
+        data: {
+          customDomain: normalized,
+          domainStatus: "PENDING",
+          domainVerificationToken: token,
+          domainVerifiedAt: null,
+        },
+        select: {
+          id: true,
+          customDomain: true,
+          domainStatus: true,
+          domainVerificationToken: true,
+          domainVerifiedAt: true,
+        },
+      })
+
+      // Create domain claim record for audit
+      await tx.domainClaim.create({
+        data: {
+          domain: normalized,
+          merchantId: merchant.id,
+          status: "PENDING",
+          token,
+        },
+      })
+
+      return updatedMerchant
     })
+
+    const recordName = getVerificationRecordName(normalized)
 
     return NextResponse.json({
       merchant: updated,
       dnsInstructions: {
         type: "TXT",
-        name: `_sellarity.${normalized}`,
+        name: recordName,
         value: token,
       },
       message: "Domain saved. Please add the DNS TXT record to verify.",
     })
   } catch (error: any) {
     console.error("Add domain error:", error)
+
+    // Handle unique constraint violation
+    if (error.code === "P2002" && error.meta?.target?.includes("customDomain")) {
+      return NextResponse.json(
+        { error: "This domain is already in use by another store" },
+        { status: 409 }
+      )
+    }
+
     return NextResponse.json(
       { error: error.message || "Failed to add domain" },
       { status: 500 }

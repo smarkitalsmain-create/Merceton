@@ -1,14 +1,15 @@
 export const runtime = "nodejs"
 
 import { NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import crypto from "crypto"
 
 export async function POST() {
   try {
-    const { userId } = auth()
-
-    if (!userId) {
+    const supabase = createSupabaseServerClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    
+    if (error || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

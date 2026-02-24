@@ -9,8 +9,10 @@ interface ClientDateProps {
 
 export function ClientDate({ value, className }: ClientDateProps) {
   const [formatted, setFormatted] = useState<string>("")
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     const date = typeof value === "string" ? new Date(value) : value
     if (Number.isNaN(date.getTime())) {
       setFormatted("")
@@ -31,7 +33,10 @@ export function ClientDate({ value, className }: ClientDateProps) {
     setFormatted(formatter.format(date))
   }, [value])
 
-  if (!formatted) return null
+  // Render a stable placeholder on server to avoid hydration mismatch
+  if (!mounted || !formatted) {
+    return <span className={className}>—</span>
+  }
 
   return <span className={className}>{formatted}</span>
 }

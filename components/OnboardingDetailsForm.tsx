@@ -22,15 +22,18 @@ import {
   panStepSchema,
   gstStepSchema,
   businessBasicsStepSchema,
+  contactInfoSchema,
   type PanStepData,
   type GstStepData,
   type BusinessBasicsStepData,
+  type ContactInfoData,
 } from "@/lib/validations/onboarding"
 import { maskPan, maskGstin } from "@/lib/onboardingMask"
 import {
   updateOnboardingPan,
   updateOnboardingGst,
   updateOnboardingBusiness,
+  updateOnboardingContactInfo,
 } from "@/app/actions/onboarding"
 import { Lock, Edit2, X, Save } from "lucide-react"
 import { toDateInputValue } from "@/lib/dateUtils"
@@ -58,11 +61,19 @@ interface OnboardingDetailsFormProps {
     secondaryCategory?: string | null
     avgPriceRange?: string | null
     expectedSkuRange?: string | null
+    contactEmail?: string | null
+    contactPhone?: string | null
+    websiteUrl?: string | null
+    contactAddressLine1?: string | null
+    contactAddressLine2?: string | null
+    contactCity?: string | null
+    contactState?: string | null
+    contactPincode?: string | null
   }
   hasOrders: boolean
 }
 
-type Section = "NONE" | "PAN" | "GST" | "BUSINESS"
+type Section = "NONE" | "PAN" | "GST" | "BUSINESS" | "CONTACT"
 
 export function OnboardingDetailsForm({
   initialOnboarding,
@@ -112,15 +123,32 @@ export function OnboardingDetailsForm({
     },
   })
 
+  const contactForm = useForm<ContactInfoData>({
+    resolver: zodResolver(contactInfoSchema),
+    defaultValues: {
+      contactEmail: initialOnboarding.contactEmail || "",
+      contactPhone: initialOnboarding.contactPhone || "",
+      websiteUrl: initialOnboarding.websiteUrl || "",
+    },
+  })
+
+  // Note: panVerifiedAt field doesn't exist in schema - always false
+  const isPanVerified = false
   const canEditPanNumber =
-    initialOnboarding.onboardingStatus !== "COMPLETED" && !hasOrders
+    !isPanVerified &&
+    initialOnboarding.onboardingStatus !== "COMPLETED" &&
+    !hasOrders
 
   const currentGstStatus = gstForm.watch("gstStatus")
   const isRegistered = currentGstStatus === "REGISTERED"
   const originalGstStatus = initialOnboarding.gstStatus
   const ordersExist = hasOrders
+  // Note: gstVerifiedAt field doesn't exist in schema - always false
+  const isGstVerified = false
   // GSTIN is hard-locked only if original status was REGISTERED and there are existing orders
-  const isGstinHardLocked = originalGstStatus === "REGISTERED" && ordersExist
+  // or if GST has been explicitly verified
+  const isGstinHardLocked =
+    isGstVerified || (originalGstStatus === "REGISTERED" && ordersExist)
   // In edit mode, GSTIN is enabled only when status is REGISTERED and not hard-locked
   const canEditGstin = isRegistered && !isGstinHardLocked
 
@@ -198,6 +226,26 @@ export function OnboardingDetailsForm({
     })
   }
 
+  const handleContactSave = (data: ContactInfoData) => {
+    startTransition(async () => {
+      const result = await updateOnboardingContactInfo(data)
+      if (result.success) {
+        toast({
+          title: "Contact info updated",
+          description: "Your contact information has been updated successfully.",
+        })
+        setEditingSection("NONE")
+        router.refresh()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to update contact info",
+          variant: "destructive",
+        })
+      }
+    })
+  }
+
   const statusColor =
     initialOnboarding.onboardingStatus === "COMPLETED" ? "default" : "secondary"
 
@@ -233,6 +281,7 @@ export function OnboardingDetailsForm({
                 variant="outline"
                 size="sm"
                 onClick={() => setEditingSection("PAN")}
+                disabled={isPanVerified}
               >
                 <Edit2 className="h-4 w-4 mr-1" />
                 Edit
@@ -247,6 +296,12 @@ export function OnboardingDetailsForm({
                 Cancel
               </Button>
             )}
+            {isPanVerified && (
+              <span className="flex items-center text-xs text-muted-foreground" title="Locked after verification">
+                <Lock className="h-3 w-3 mr-1" />
+                Locked after verification
+              </span>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -258,7 +313,15 @@ export function OnboardingDetailsForm({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">PAN Number</span>
-                <span>{maskPan(initialOnboarding.panNumber)}</span>
+                <span className="inline-flex items-center gap-1">
+                  {maskPan(initialOnboarding.panNumber)}
+                  {isPanVerified && (
+                    <Lock
+                      className="h-3 w-3 text-muted-foreground"
+                      aria-label="Locked after verification"
+                    />
+                  )}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Name as per PAN</span>
@@ -735,6 +798,257 @@ export function OnboardingDetailsForm({
                   {...businessForm.register("expectedSkuRange")}
                   placeholder="e.g., UNDER_10, 10_50"
                 />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingSection("NONE")}
+                  disabled={isPending}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={isPending}>
+                  {isPending ? (
+                    <>
+                      <Save className="h-4 w-4 mr-1 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-1" />
+                      Save
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Contact Info */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle>Contact Info</CardTitle>
+            <CardDescription>Support contact details for invoices</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            {editingSection !== "CONTACT" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingSection("CONTACT")}
+              >
+                <Edit2 className="h-4 w-4 mr-1" />
+                Edit
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditingSection("NONE")}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cancel
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {editingSection !== "CONTACT" ? (
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Support Email</span>
+                <span>{initialOnboarding.contactEmail || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Support Phone</span>
+                <span>{initialOnboarding.contactPhone || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Website</span>
+                <span>{initialOnboarding.websiteUrl || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Address Line 1</span>
+                <span>{initialOnboarding.contactAddressLine1 || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Address Line 2</span>
+                <span>{initialOnboarding.contactAddressLine2 || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">City</span>
+                <span>{initialOnboarding.contactCity || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">State</span>
+                <span>{initialOnboarding.contactState || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Pincode</span>
+                <span>{initialOnboarding.contactPincode || "-"}</span>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={contactForm.handleSubmit(handleContactSave)} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="contactEmail">Support Email (Optional)</Label>
+                <Input
+                  id="contactEmail"
+                  type="email"
+                  {...contactForm.register("contactEmail")}
+                  placeholder="support@example.com"
+                />
+                {contactForm.formState.errors.contactEmail && (
+                  <p className="text-xs text-destructive">
+                    {contactForm.formState.errors.contactEmail.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="contactPhone">Support Phone (Optional)</Label>
+                <Input
+                  id="contactPhone"
+                  type="tel"
+                  {...contactForm.register("contactPhone")}
+                  placeholder="+91 1234567890"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="websiteUrl">Website URL (Optional)</Label>
+                <Input
+                  id="websiteUrl"
+                  type="url"
+                  {...contactForm.register("websiteUrl")}
+                  placeholder="https://example.com"
+                />
+                {contactForm.formState.errors.websiteUrl && (
+                  <p className="text-xs text-destructive">
+                    {contactForm.formState.errors.websiteUrl.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="border-t pt-4 mt-4">
+                <h4 className="text-sm font-semibold mb-4">Address</h4>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="contactAddressLine1">Address Line 1 *</Label>
+                    <Input
+                      id="contactAddressLine1"
+                      {...contactForm.register("contactAddressLine1")}
+                      placeholder="Street address, building name"
+                    />
+                    {contactForm.formState.errors.contactAddressLine1 && (
+                      <p className="text-xs text-destructive">
+                        {contactForm.formState.errors.contactAddressLine1.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="contactAddressLine2">Address Line 2 (Optional)</Label>
+                    <Input
+                      id="contactAddressLine2"
+                      {...contactForm.register("contactAddressLine2")}
+                      placeholder="Apartment, suite, unit, etc."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="contactCity">City *</Label>
+                      <Input
+                        id="contactCity"
+                        {...contactForm.register("contactCity")}
+                        placeholder="City"
+                      />
+                      {contactForm.formState.errors.contactCity && (
+                        <p className="text-xs text-destructive">
+                          {contactForm.formState.errors.contactCity.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="contactState">State *</Label>
+                      <Select
+                        value={contactForm.watch("contactState")}
+                        onValueChange={(value) => contactForm.setValue("contactState", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Andhra Pradesh">Andhra Pradesh</SelectItem>
+                          <SelectItem value="Arunachal Pradesh">Arunachal Pradesh</SelectItem>
+                          <SelectItem value="Assam">Assam</SelectItem>
+                          <SelectItem value="Bihar">Bihar</SelectItem>
+                          <SelectItem value="Chhattisgarh">Chhattisgarh</SelectItem>
+                          <SelectItem value="Goa">Goa</SelectItem>
+                          <SelectItem value="Gujarat">Gujarat</SelectItem>
+                          <SelectItem value="Haryana">Haryana</SelectItem>
+                          <SelectItem value="Himachal Pradesh">Himachal Pradesh</SelectItem>
+                          <SelectItem value="Jharkhand">Jharkhand</SelectItem>
+                          <SelectItem value="Karnataka">Karnataka</SelectItem>
+                          <SelectItem value="Kerala">Kerala</SelectItem>
+                          <SelectItem value="Madhya Pradesh">Madhya Pradesh</SelectItem>
+                          <SelectItem value="Maharashtra">Maharashtra</SelectItem>
+                          <SelectItem value="Manipur">Manipur</SelectItem>
+                          <SelectItem value="Meghalaya">Meghalaya</SelectItem>
+                          <SelectItem value="Mizoram">Mizoram</SelectItem>
+                          <SelectItem value="Nagaland">Nagaland</SelectItem>
+                          <SelectItem value="Odisha">Odisha</SelectItem>
+                          <SelectItem value="Punjab">Punjab</SelectItem>
+                          <SelectItem value="Rajasthan">Rajasthan</SelectItem>
+                          <SelectItem value="Sikkim">Sikkim</SelectItem>
+                          <SelectItem value="Tamil Nadu">Tamil Nadu</SelectItem>
+                          <SelectItem value="Telangana">Telangana</SelectItem>
+                          <SelectItem value="Tripura">Tripura</SelectItem>
+                          <SelectItem value="Uttar Pradesh">Uttar Pradesh</SelectItem>
+                          <SelectItem value="Uttarakhand">Uttarakhand</SelectItem>
+                          <SelectItem value="West Bengal">West Bengal</SelectItem>
+                          <SelectItem value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</SelectItem>
+                          <SelectItem value="Chandigarh">Chandigarh</SelectItem>
+                          <SelectItem value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</SelectItem>
+                          <SelectItem value="Delhi">Delhi</SelectItem>
+                          <SelectItem value="Jammu and Kashmir">Jammu and Kashmir</SelectItem>
+                          <SelectItem value="Ladakh">Ladakh</SelectItem>
+                          <SelectItem value="Lakshadweep">Lakshadweep</SelectItem>
+                          <SelectItem value="Puducherry">Puducherry</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {contactForm.formState.errors.contactState && (
+                        <p className="text-xs text-destructive">
+                          {contactForm.formState.errors.contactState.message}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="contactPincode">Pincode *</Label>
+                    <Input
+                      id="contactPincode"
+                      {...contactForm.register("contactPincode")}
+                      placeholder="6 digits"
+                      maxLength={6}
+                      pattern="[0-9]{6}"
+                    />
+                    {contactForm.formState.errors.contactPincode && (
+                      <p className="text-xs text-destructive">
+                        {contactForm.formState.errors.contactPincode.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2">

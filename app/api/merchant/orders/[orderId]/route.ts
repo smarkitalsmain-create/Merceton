@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
@@ -9,24 +9,26 @@ export async function GET(
   { params }: { params: { orderId: string } }
 ) {
   try {
-    const { userId } = auth()
-    if (!userId) {
+    const supabase = createSupabaseServerClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    
+    if (error || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { authUserId: userId },
+    const dbUser = await prisma.user.findUnique({
+      where: { authUserId: user.id },
       include: { merchant: true },
     })
 
-    if (!user?.merchant) {
+    if (!dbUser?.merchant) {
       return NextResponse.json({ error: "Merchant not found" }, { status: 403 })
     }
 
     const order = await prisma.order.findFirst({
       where: {
         id: params.orderId,
-        merchantId: user.merchant.id,
+        merchantId: dbUser.merchant.id,
       },
       include: {
         items: {

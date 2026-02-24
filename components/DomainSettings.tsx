@@ -204,7 +204,7 @@ export function DomainSettings({ merchant: initialMerchant }: DomainSettingsProp
             </p>
             <div className="font-mono text-sm space-y-1">
               <div><strong>Type:</strong> TXT</div>
-              <div><strong>Name:</strong> _sellarity.{merchant.customDomain}</div>
+              <div><strong>Name:</strong> _merceton.{merchant.customDomain}</div>
               <div><strong>Value:</strong> {merchant.domainVerificationToken}</div>
             </div>
             <p className="text-xs text-muted-foreground mt-2">

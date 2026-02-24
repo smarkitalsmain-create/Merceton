@@ -6,7 +6,7 @@ import { optionalJson } from "@/lib/prismaJson"
 export interface AuditLogInput {
   actorUserId: string
   actorEmail?: string | null
-  actionType: string
+  actionType: string // Keep for backward compatibility, maps to `action` field
   entityType: string
   entityId?: string | null
   reason: string
@@ -29,7 +29,7 @@ export async function logAdminAction(input: AuditLogInput): Promise<void> {
     data: {
       actorUserId: input.actorUserId,
       actorEmail: input.actorEmail || null,
-      actionType: input.actionType,
+      actionType: input.actionType, // Use actionType field (not action)
       entityType: input.entityType,
       entityId: input.entityId || null,
       reason: input.reason,
@@ -50,7 +50,7 @@ export async function getAuditLogs(filters: {
   actorUserId?: string
   entityType?: string
   entityId?: string
-  actionType?: string
+  actionType?: string // Keep for backward compatibility, maps to `action` field
   startDate?: Date
   endDate?: Date
   limit?: number
@@ -67,7 +67,7 @@ export async function getAuditLogs(filters: {
     where.entityId = filters.entityId
   }
   if (filters.actionType) {
-    where.actionType = filters.actionType
+    where.actionType = filters.actionType // Use actionType field (not action)
   }
   if (filters.startDate || filters.endDate) {
     where.createdAt = {}

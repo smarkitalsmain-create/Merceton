@@ -68,7 +68,7 @@ export default function CreateStoreForm() {
           <div className="space-y-2">
             <Label htmlFor="storeSlug">Store URL</Label>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">sellarity.com/s/</span>
+              <span className="text-sm text-muted-foreground">merceton.com/s/</span>
               <Input
                 id="storeSlug"
                 name="storeSlug"

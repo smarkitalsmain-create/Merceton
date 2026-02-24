@@ -12,6 +12,7 @@ import {
   Wallet,
   Palette,
   Globe,
+  FileText,
 } from "lucide-react"
 
 const navigation = [
@@ -41,6 +42,11 @@ const navigation = [
     icon: Wallet,
   },
   {
+    name: "Billing",
+    href: "/dashboard/billing",
+    icon: FileText,
+  },
+  {
     name: "Settings",
     href: "/dashboard/settings",
     icon: Settings,
@@ -60,7 +66,7 @@ export function DashboardSidebar() {
       <div className="flex h-16 items-center border-b px-6">
         <Link href="/dashboard" className="flex items-center gap-2">
           <Store className="h-6 w-6" />
-          <span className="text-lg font-bold">Sellarity</span>
+          <span className="text-lg font-bold">Merceton</span>
         </Link>
       </div>
       <nav className="flex-1 space-y-1 p-4">

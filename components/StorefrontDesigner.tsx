@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { ClientDate } from "@/components/ClientDate"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Palette, Code, Upload, X } from "lucide-react"
-import { uploadToCloudinary } from "@/lib/cloudinary"
+import { uploadImage } from "@/lib/uploads/uploadImage"
 import { publishStorefront, unpublishStorefront } from "@/app/dashboard/storefront/actions"
 import Image from "next/image"
 
@@ -77,42 +77,22 @@ export function StorefrontDesigner({
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      toast({
-        title: "Invalid file",
-        description: "Please select an image file",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Please select an image smaller than 5MB",
-        variant: "destructive",
-      })
-      return
-    }
-
     setLogoUploading(true)
     setLogoUploadProgress(0)
 
     try {
-      const result = await uploadToCloudinary(file, (progress) => {
-        setLogoUploadProgress(progress)
-      })
+      const result = await uploadImage(file, "logo")
       setLogoUrl(result.url)
+      setLogoUploadProgress(100)
       toast({
         title: "Logo uploaded",
         description: "Your logo has been uploaded successfully.",
       })
     } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to upload logo"
       toast({
         title: "Upload failed",
-        description: error.message || "Failed to upload logo",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
