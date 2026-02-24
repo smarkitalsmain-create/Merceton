@@ -1,5 +1,5 @@
 # Pricing Plan Deliverability Audit Report
-**Merceton/Sellarity - Feature Readiness Assessment**
+**Merceton - Feature Readiness Assessment**
 
 **Date:** 2025-02-23  
 **Auditor:** Senior SaaS Engineer + QA Lead  

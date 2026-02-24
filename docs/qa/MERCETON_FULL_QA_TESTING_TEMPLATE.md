@@ -5,47 +5,57 @@ Generated On: 2026-02-24
 Build Version: __________  
 Tester Name: __________  
 
+**Host routing (must test on correct host):**
+- **merceton.com** (root/landing) → landing pages only; `/admin` and `/dashboard` redirect to `/`.
+- **app.merceton.com** → merchant SaaS; `/` redirects to `/dashboard`; `/dashboard/*` requires auth.
+- **admin.merceton.com** → super admin; `/` redirects to `/admin`; `/admin/*` (except `/admin/sign-in`) requires auth.
+
 ----------------------------------------  
 SECTION 1 – SUMMARY CHECKLIST  
 ----------------------------------------
 
-| Area                 | Pass/Fail | Notes |
-|----------------------|-----------|-------|
-| Authentication       |           |       |
-| Merchant Onboarding  |           |       |
-| Storefront           |           |       |
-| Products             |           |       |
-| Orders               |           |       |
-| Payments             |           |       |
-| Coupons              |           |       |
-| Domains              |           |       |
-| Ledger               |           |       |
-| Platform Billing     |           |       |
-| Payouts              |           |       |
-| Refunds              |           |       |
-| Analytics            |           |       |
-| Admin Panel          |           |       |
-| Feature Gating       |           |       |
-| Multi-Tenant Isolation |         |       |
-| Security Controls    |           |       |
-| Cron Jobs            |           |       |
+| Area                     | Pass/Fail | Notes |
+|--------------------------|-----------|-------|
+| Host & Middleware Routing |           |       |
+| Authentication           |           |       |
+| Merchant Onboarding      |           |       |
+| Storefront               |           |       |
+| Products                 |           |       |
+| Orders                   |           |       |
+| Payments                 |           |       |
+| Coupons                  |           |       |
+| Domains                  |           |       |
+| Ledger                   |           |       |
+| Platform Billing         |           |       |
+| Payouts                  |           |       |
+| Refunds                  |           |       |
+| Analytics                |           |       |
+| Admin Panel              |           |       |
+| Feature Gating           |           |       |
+| Multi-Tenant Isolation   |           |       |
+| Security Controls        |           |       |
+| Cron Jobs                |           |       |
 
 ----------------------------------------  
 SECTION 2 – UI TEST CASES  
 ----------------------------------------
 
 > All UI tests are derived from `app/**/page.tsx`.  
+> **Host context:** Run landing tests on **merceton.com** (or root domain); merchant dashboard tests on **app.merceton.com**; admin tests on **admin.merceton.com**. Use Host header or real domains in QA.  
 > Status, Remarks, Suggestions must be filled by testers after execution.
 
 | Module | Screen (Human Name) | Route | Feature | Test Data Needed | Test Steps (click-by-click) | Expected Result | Priority (P0/P1/P2) | Status (Pass/Fail) | Remarks | Suggestions |
 |--------|----------------------|-------|---------|------------------|-----------------------------|-----------------|----------------------|--------------------|---------|-------------|
-| app/page.tsx | Landing Page | `/` | Landing page loads | None | 1. Open a fresh browser session. 2. Navigate to `/`. | Landing page renders without errors and primary marketing content is visible. | P1 |  |  |  |
-| app/sign-in/page.tsx | Merchant Sign-In | `/sign-in` | Sign-in page loads | None | 1. Open browser. 2. Navigate to `/sign-in`. | Sign-in form with email/password inputs and submit action is displayed without errors. | P0 |  |  |  |
-| app/sign-up/page.tsx | Merchant Sign-Up | `/sign-up` | Sign-up page loads | None | 1. Open browser. 2. Navigate to `/sign-up`. | Sign-up form for new merchants appears with all required fields visible. | P0 |  |  |  |
-| app/forgot-password/page.tsx | Forgot Password | `/forgot-password` | Forgot password page loads | Test email address | 1. Navigate to `/forgot-password`. | Forgot password UI renders and accepts an email address. | P1 |  |  |  |
+| Host routing | Root path by host | `/` | Host redirects | None | 1. On **merceton.com** open `/`. 2. On **app.merceton.com** open `/`. 3. On **admin.merceton.com** open `/`. | Landing: `/` shows landing. App: `/` redirects to `/dashboard`. Admin: `/` redirects to `/admin`. No 404, no redirect loop. | P0 |  |  |  |
+| Host routing | Landing blocks app/admin paths | `/admin`, `/dashboard` | Block on root domain | None | 1. On **merceton.com** navigate to `/admin` and `/dashboard`. | Both redirect to `/` (landing). Root domain must not serve app or admin UI. | P0 |  |  |  |
+| Host routing | Admin sign-in public | `/admin/sign-in` | No redirect loop | None | 1. On **admin.merceton.com** open `/admin/sign-in` (signed out). | Admin sign-in page loads; URL stays `/admin/sign-in`. No redirect to `?next=/admin/sign-in` loop. | P0 |  |  |  |
+| app/page.tsx | Landing Page | `/` | Landing page loads | None | 1. On **merceton.com** (root domain), open `/`. | Landing page renders without errors and primary marketing content is visible. | P1 |  |  |  |
+| app/sign-in/page.tsx | Merchant Sign-In | `/sign-in` | Sign-in page loads | None | 1. On **app.merceton.com** (or after redirect from protected path), navigate to `/sign-in`. | Sign-in form with email/password inputs and submit action is displayed without errors. Unauthenticated `/dashboard` redirects here with `?next=`. | P0 |  |  |  |
+| app/sign-up/page.tsx | Merchant Sign-Up | `/sign-up` | Sign-up page loads | None | 1. On **app.merceton.com** navigate to `/sign-up`. | Sign-up form for new merchants appears with all required fields visible. | P0 |  |  |  |
+| app/forgot-password/page.tsx | Forgot Password | `/forgot-password` | Forgot password page loads | Test email address | 1. Navigate to `/forgot-password` (public on any host). | Forgot password UI renders and accepts an email address. | P1 |  |  |  |
 | app/reset-password/page.tsx | Reset Password | `/reset-password` | Reset password page loads | Valid reset token (if required) | 1. Navigate to `/reset-password` (with token if applicable). | Reset password form renders and allows new password input. | P1 |  |  |  |
 | app/503/page.tsx | Maintenance / 503 | `/503` | Maintenance page loads | None | 1. Navigate to `/503` directly. | 503/maintenance page renders and clearly indicates degraded state. | P1 |  |  |  |
-| app/dashboard/page.tsx | Merchant Dashboard | `/dashboard` | Dashboard overview loads | Merchant account with orders | 1. Log in as merchant. 2. Navigate to `/dashboard`. | Dashboard overview displays store summary without errors. | P0 |  |  |  |
+| app/dashboard/page.tsx | Merchant Dashboard | `/dashboard` | Dashboard overview loads | Merchant account with orders | 1. On **app.merceton.com** log in as merchant. 2. Navigate to `/dashboard` (or `/` to get redirected). | Dashboard overview displays store summary without errors. | P0 |  |  |  |
 | app/dashboard/orders/page.tsx | Dashboard → Orders | `/dashboard/orders` | Orders list displays | Merchant with at least one order | 1. Log in as merchant. 2. Go to “Orders” in sidebar or directly to `/dashboard/orders`. | Orders table shows recent orders or a clear empty state. | P0 |  |  |  |
 | app/dashboard/orders/[orderId]/page.tsx | Dashboard → Order Detail | `/dashboard/orders/[orderId]` | Order detail view | Existing orderId | 1. From Orders list, click an order. 2. Confirm navigation to detail screen. | Order header, customer info, items and status fields are displayed. | P0 |  |  |  |
 | app/dashboard/orders/[orderId]/invoice/page.tsx | Dashboard → Order Invoice | `/dashboard/orders/[orderId]/invoice` | Order invoice view | Existing order with invoice | 1. From an order detail page, click “View Invoice” (or navigate directly). | Invoice page renders; download/print action is available. | P0 |  |  |  |
@@ -79,8 +89,8 @@ SECTION 2 – UI TEST CASES
 | app/s/[slug]/checkout/page.tsx | Storefront Checkout | `/s/[slug]/checkout` | Checkout page loads | Shopper cart with at least one item | 1. Add items to cart. 2. Navigate to `/s/{slug}/checkout`. | Checkout form renders with address and payment options. | P0 |  |  |  |
 | app/s/[slug]/order/[orderId]/page.tsx | Storefront Order Status | `/s/[slug]/order/[orderId]` | Customer order status | Completed orderId | 1. Navigate to `/s/{slug}/order/{orderId}`. | Order summary and status are shown to the customer. | P0 |  |  |  |
 | app/s/[slug]/order/[orderId]/payment/page.tsx | Storefront Order Payment | `/s/[slug]/order/[orderId]/payment` | Payment continuation | Pending payment orderId | 1. Navigate to `/s/{slug}/order/{orderId}/payment`. | Payment continuation view is displayed to complete payment. | P0 |  |  |  |
-| app/admin/sign-in/page.tsx | Admin Sign-In | `/admin/sign-in` | Admin login screen | None | 1. Navigate to `/admin/sign-in`. | Admin login UI for platform admins is displayed. | P0 |  |  |  |
-| app/admin/(protected)/page.tsx | Admin Dashboard | `/admin` | Admin overview | Platform admin account | 1. Log in as admin. 2. Navigate to `/admin`. | Admin dashboard loads with overview information. | P0 |  |  |  |
+| app/admin/sign-in/page.tsx | Admin Sign-In | `/admin/sign-in` | Admin login screen | None | 1. On **admin.merceton.com** navigate to `/admin/sign-in` (signed out). | Admin login UI for platform admins is displayed; no redirect loop. | P0 |  |  |  |
+| app/admin/(protected)/page.tsx | Admin Dashboard | `/admin` | Admin overview | Platform admin account | 1. On **admin.merceton.com** log in as admin. 2. Navigate to `/admin` (or `/` to get redirected). | Admin dashboard loads with overview information. | P0 |  |  |  |
 | app/admin/(protected)/merchants/page.tsx | Admin → Merchants | `/admin/merchants` | Merchant list | Multiple merchants in DB | 1. Navigate to `/admin/merchants`. | Table listing merchants is displayed. | P0 |  |  |  |
 | app/admin/(protected)/merchants/[merchantId]/page.tsx | Admin → Merchant Detail | `/admin/merchants/[merchantId]` | Merchant detail view | MerchantId | 1. From merchant list, click a merchant. | Merchant overview tabs (status, billing, pricing) are visible. | P0 |  |  |  |
 | app/admin/(protected)/orders/page.tsx | Admin → Orders | `/admin/orders` | Admin orders list | Orders across merchants | 1. Navigate to `/admin/orders`. | Platform-wide orders table renders. | P0 |  |  |  |
@@ -98,6 +108,7 @@ SECTION 3 – API TEST CASES
 ----------------------------------------
 
 > All API tests are derived from `app/api/**/route.ts`.  
+> **Middleware:** Paths under `/api`, `/_next`, `favicon.ico`, `robots.txt`, `sitemap.xml` are excluded from middleware; auth is not applied by middleware for API routes. Each API route must enforce its own auth/tenant checks where required.  
 > For each endpoint, cover at least: Happy path, Missing authentication, Wrong authentication, Tenant isolation violation attempt, Invalid payload, Duplicate/replay attempt (if applicable), External integration failure (if applicable), and Error response format.
 
 | Module | Endpoint | Scenario | Request / Steps | Expected Result | Priority | Status (Pass/Fail) | Remarks | Suggestions |
@@ -123,7 +134,7 @@ SECTION 3 – API TEST CASES
 | app/api/webhooks/razorpay/route.ts | `POST /api/webhooks/razorpay` | Duplicate webhook | 1. Send same valid `payment.captured` event twice. | First call performs updates; second call exits early when Payment already PAID and returns `{ received: true }`. | P0 |  |  |  |
 | app/api/webhooks/razorpay/route.ts | `POST /api/webhooks/razorpay` | Error response format | 1. Force internal error (e.g., invalid DB connectivity). | Endpoint returns 500 with `{ error: "Webhook processing failed" }` and attempts to send ops alert email. | P0 |  |  |  |
 | app/api/domains/verify/route.ts | `POST /api/domains/verify` | Happy path | 1. Configure merchant with PENDING domain and correct TXT record. 2. Call endpoint as authenticated merchant. | Domain status is updated to VERIFIED, `domainVerifiedAt` set, and JSON indicates success. | P0 |  |  |  |
-| app/api/domains/verify/route.ts | `POST /api/domains/verify` | Missing authentication | 1. Call endpoint without session. | Middleware/auth blocks or redirects to sign-in; document behavior. | P0 |  |  |  |
+| app/api/domains/verify/route.ts | `POST /api/domains/verify` | Missing authentication | 1. Call endpoint without session. | API is not gated by middleware; route-level auth must reject or redirect; document behavior. | P0 |  |  |  |
 | app/api/domains/verify/route.ts | `POST /api/domains/verify` | DNS TXT missing | 1. Configure domain without TXT record. 2. Call endpoint. | Domain status moves to FAILED and response explains missing TXT record and expected value. | P0 |  |  |  |
 | app/api/domains/add/route.ts | `POST /api/domains/add` | Happy path | 1. Authenticated merchant posts valid custom domain. | Merchant record updated to PENDING domain with verification token; JSON returns updated merchant. | P1 |  |  |  |
 | app/api/products/import/route.ts | `POST /api/products/import` | Valid CSV import | 1. Upload CSV with <= 1000 rows and valid columns. | Response shows validation summary and successful inserts; preview matches expected. | P1 |  |  |  |
@@ -161,15 +172,20 @@ SECTION 5 – SECURITY & TENANT ISOLATION TESTS
 | Domains | Domain spoofing attempt | 1. Set custom domain equal to platform domain or another merchant’s domain. 2. Attempt verification. | Domain add is rejected (platform domain) or uniqueness violation prevents hijacking; middleware only serves storefront for verified/active domains. | P0 |  |  |  |
 | Uploads | Upload invalid file type | 1. Call `/api/uploads/image` or document upload with disallowed MIME type or size > limits. | Endpoint returns validation error and does not persist or forward file. | P1 |  |  |  |
 | Feature Gating | Feature override abuse | 1. Try to access feature-gated API endpoints without entitlements (e.g., analytics, coupons). | Requests are denied with clear “upgrade required” error or 403; logs/audit entries may be created as designed. | P1 |  |  |  |
-| Admin Access | Non-allowlisted user accessing admin panel | 1. Log in as regular merchant. 2. Navigate to `/admin` and `/api/admin/**`. | Access is denied (redirect to dashboard or 403); no admin data is exposed. | P0 |  |  |  |
+| Admin Access | Non-allowlisted user accessing admin panel | 1. Log in as regular merchant. 2. On **admin.merceton.com** navigate to `/admin` (or on any host try `/admin`). | On admin host, unauthenticated or non-admin user is redirected to `/admin/sign-in` or access denied; no admin data exposed. | P0 |  |  |  |
+| Host & Middleware | Redirect loop on admin sign-in | 1. On **admin.merceton.com** while signed out, open `/admin/sign-in`. | Page loads; URL remains `/admin/sign-in`. No redirect to `?next=/admin/sign-in` (no loop). | P0 |  |  |  |
+| Host & Middleware | App root and admin root redirect | 1. On **app.merceton.com** open `/`. 2. On **admin.merceton.com** open `/`. | App: redirect to `/dashboard`. Admin: redirect to `/admin`. No 404 on `/`. | P0 |  |  |  |
+| Host & Middleware | Landing blocks /admin and /dashboard | 1. On **merceton.com** (root) open `/admin` and `/dashboard`. | Both redirect to `/`; landing host must not serve app or admin UI. | P0 |  |  |  |
 
 ----------------------------------------  
 SECTION 6 – REGRESSION SMOKE SUITE (Top 30 P0 Tests)  
 ----------------------------------------
 
-> Use this list for fast validation on each deployment. It combines the most critical UI, API and financial tests.
+> Use this list for fast validation on each deployment. It combines the most critical UI, API and financial tests.  
+> **Hosts:** Test on **merceton.com** (landing), **app.merceton.com** (merchant), **admin.merceton.com** (admin) as applicable.
 
-- Merchant sign-in and sign-up pages load and submit successfully.
+- **Host routing:** On merceton.com, `/` shows landing; `/admin` and `/dashboard` redirect to `/`. On app.merceton.com, `/` redirects to `/dashboard`. On admin.merceton.com, `/` redirects to `/admin`; `/admin/sign-in` loads without redirect loop.
+- Merchant sign-in and sign-up pages load and submit successfully (on app host).
 - Merchant dashboard loads correctly after login.
 - Storefront home, product detail, checkout, order status and order payment screens load for a valid store.
 - Dashboard Orders list and Order detail pages load and reflect recent orders.
@@ -188,7 +204,7 @@ SECTION 6 – REGRESSION SMOKE SUITE (Top 30 P0 Tests)
 - Weekly payout execution job creates PayoutBatch records and marks invoices as PAID.
 - Merchant ON_HOLD prevents payouts as intended.
 - File upload endpoints enforce file type and size limits.
-- Unauthorized access to `/admin` or `/api/admin/**` is blocked.
+- Unauthorized access to `/admin` or `/api/admin/**` is blocked; on admin host, unauthenticated users are sent to `/admin/sign-in` (no loop).
 - Unauthorized or cross-tenant attempts against `/api/merchant/**` endpoints are blocked.
 - Payment-related endpoints are tested from unauthenticated clients to detect any regression in auth hardening.
 - Health check and env-check endpoints behave as expected and do not leak secrets.
@@ -199,19 +215,77 @@ SECTION 6 – REGRESSION SMOKE SUITE (Top 30 P0 Tests)
 SECTION 7 – TEST COVERAGE SUMMARY  
 ----------------------------------------
 
-- **Total test cases generated (UI + API + flows + security scenarios)**: ~600  
+- **Total test cases generated (UI + API + flows + security + host/middleware)**: ~620  
 - **Approximate counts by area**:  
-  - UI screens: ~60 distinct screen-level test cases.  
-  - API endpoints: covered with multi-scenario tests for payments, webhooks, domains, products, orders, uploads, analytics, coupons, admin and cron/jobs.  
+  - Host & middleware: host-type detection, root redirects, public auth routes, no redirect loop, landing blocks app/admin paths.  
+  - UI screens: ~60+ distinct screen-level test cases (with host context where applicable).  
+  - API endpoints: covered with multi-scenario tests for payments, webhooks, domains, products, orders, uploads, analytics, coupons, admin and cron/jobs; `/api` excluded from middleware.  
   - Financial flows: 10 end-to-end flow scenarios.  
-  - Security & tenant isolation: 8 targeted attack-style tests.  
+  - Security & tenant isolation: 8+ targeted tests including host routing and admin sign-in loop.  
 - **Approximate count by priority**:  
-  - P0: Focused on payments, orders, payouts, ledger, domain verification, admin critical paths and settlement jobs (dozens of tests).  
+  - P0: Host routing, auth redirects, payments, orders, payouts, ledger, domain verification, admin critical paths and settlement jobs.  
   - P1: Onboarding, coupons, analytics, admin configuration screens.  
   - P2: Ancillary or cosmetic features.  
 - **Coverage estimate**:  
-  - UI: High – all key screens and flows represented.  
-  - API: High – core endpoints and financial/security-sensitive endpoints explicitly covered.  
-  - Financial: High – end-to-end flows around money, fees, invoices and payouts are modeled.  
-  - Security: High – tenant isolation, auth bypass attempts, signature tampering and domain spoofing have dedicated tests.
+  - Host/middleware: Explicit tests for merceton.com vs app.merceton.com vs admin.merceton.com behavior.  
+  - UI: High – all key screens and flows represented with correct host.  
+  - API: High – core endpoints covered; middleware does not gate `/api`.  
+  - Financial: High – end-to-end flows around money, fees, invoices and payouts.  
+  - Security: High – tenant isolation, auth, signature tampering, domain spoofing, and redirect-loop prevention.
+
+----------------------------------------  
+SECTION 8 – MIDDLEWARE & HOST ROUTING TEST MATRIX  
+----------------------------------------
+
+> Edge-safe middleware: no Prisma/Node-only imports; Supabase SSR only; cookies path `/`; matcher excludes `_next`, `api`, `favicon.ico`, `robots.txt`, `sitemap.xml`.  
+> Public auth routes (always bypass auth): `/sign-in`, `/sign-up`, `/forgot-password`, `/reset-password`, `/admin/sign-in`, `/auth/*`.
+
+| Host (request Host header) | Path | Expected behavior | Priority |
+|----------------------------|------|-------------------|----------|
+| merceton.com (or root)     | `/` | Show landing page | P0 |
+| merceton.com               | `/admin`, `/admin/*`, `/dashboard`, `/dashboard/*` | Redirect to `/` | P0 |
+| merceton.com               | `/sign-in`, `/sign-up`, `/auth/*` | Allow (public) | P1 |
+| app.merceton.com           | `/` | Redirect to `/dashboard` | P0 |
+| app.merceton.com           | `/dashboard`, `/dashboard/*` | Require auth; else redirect to `/sign-in?next=<path>` | P0 |
+| app.merceton.com           | `/sign-in`, `/sign-up`, `/forgot-password`, `/reset-password`, `/auth/*` | Allow (public) | P0 |
+| admin.merceton.com         | `/` | Redirect to `/admin` | P0 |
+| admin.merceton.com         | `/admin/sign-in` | Allow (public); no redirect loop | P0 |
+| admin.merceton.com         | `/admin`, `/admin/*` (except sign-in) | Require auth; else redirect to `/admin/sign-in?next=<path>` | P0 |
+| Any                        | `/_next/*`, `/api/*`, `favicon.ico`, `robots.txt`, `sitemap.xml` | Skip middleware; next() | P1 |
+| Missing Supabase env       | Any protected path | Middleware does not throw; allows request through (dev warning) | P1 |
+
+----------------------------------------  
+SECTION 9 – ENVIRONMENT & DEPLOYMENT CHECKS  
+----------------------------------------
+
+| Check | Steps | Expected | Priority |
+|-------|-------|----------|----------|
+| Supabase env present | Ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set in deployment. | Auth gate works on app/admin hosts; if missing, middleware allows through and logs warning in dev. | P0 |
+| Host headers in production | Verify production serves requests with correct Host (e.g. merceton.com, app.merceton.com, admin.merceton.com). | Middleware reads `req.headers.get("host")`; wrong host causes wrong redirect behavior. | P0 |
+| Cookie path | Inspect Set-Cookie on auth responses. | Cookies set with `path=/` (no path hacks). | P1 |
+| No Prisma in middleware | Build/run middleware in Edge context. | No Prisma or Node-only imports in middleware.ts. | P0 |
+
+----------------------------------------  
+SECTION 10 – KNOWN LIMITATIONS & PARTIAL RISKS  
+----------------------------------------
+
+| Item | Description | Mitigation / QA focus |
+|------|-------------|------------------------|
+| API routes not gated by middleware | `/api/*` is excluded from middleware; no automatic redirect to sign-in. | Each API route must enforce auth/tenant; test unauthenticated and cross-tenant calls. |
+| Payment endpoints (create-razorpay-order, verify) | May accept unauthenticated requests; signature validation still applies. | Document as Partial Risk; test tenant isolation and replay. |
+| Admin role vs auth | Middleware only checks Supabase user presence for `/admin/*`; admin role/allowlist is enforced in app or API. | Verify non-admin users cannot access admin data. |
+
+----------------------------------------  
+SECTION 11 – SIGN-OFF & APPROVAL  
+----------------------------------------
+
+| Role | Name | Date | Signature / Approval |
+|------|------|------|----------------------|
+| QA Lead | | | |
+| Product / Release Manager | | | |
+| Security / Compliance (if applicable) | | | |
+
+**Build / branch tested:** __________________  
+**Environment (staging/production):** __________________  
+**Notes:** __________________
 

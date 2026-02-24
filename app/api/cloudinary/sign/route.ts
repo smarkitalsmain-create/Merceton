@@ -33,9 +33,9 @@ export async function POST() {
     }
 
     const timestamp = Math.round(Date.now() / 1000)
-    const folder = "sellarity/products"
+    const folder = "merceton/products"
 
-    // Cloudinary signed params: folder=sellarity/products&timestamp=<ts><apiSecret>
+    // Cloudinary signed params: folder=merceton/products&timestamp=<ts><apiSecret>
     const stringToSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`
     const signature = crypto.createHash("sha1").update(stringToSign).digest("hex")
 

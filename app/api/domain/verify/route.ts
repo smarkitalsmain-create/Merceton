@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Look up TXT record
-    const txtRecordName = `_sellarity.${merchant.customDomain}`
+    const txtRecordName = `_merceton.${merchant.customDomain}`
     const expectedValue = merchant.domainVerificationToken || ""
 
     let verified = false

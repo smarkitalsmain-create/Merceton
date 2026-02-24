@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    /* Light theme based on Merceton/Sellarity palette */
+    /* Light theme based on Merceton/ palette */
     /* Navy: #0F172A, Primary: #2563EB, Background: #F8FAFC, Success: #22C55E, Border: #E2E8F0 */
     --background: 210 40% 98%; /* #F8FAFC */
     --foreground: 222 47% 11%; /* #0F172A */
