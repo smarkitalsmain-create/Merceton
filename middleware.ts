@@ -1,109 +1,151 @@
+// middleware.ts
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 
+/**
+ * Hostname router + minimal auth gate.
+ *
+ * - merceton.com           → (landing) segment
+ * - app.merceton.com       → (app) segment
+ * - admin.merceton.com     → (admin) segment
+ *
+ * URL paths stay the same:
+ * - "/" on merceton.com        -> app/(landing)/page.tsx
+ * - "/dashboard" on app.*      -> app/(app)/dashboard/page.tsx
+ * - "/admin" on admin.*        -> app/(admin)/admin/page.tsx
+ *
+ * Edge-safe:
+ * - No Prisma, no Node-only libs.
+ * - Only uses Supabase SSR with cookies.
+ * - Skips /api, /_next, and static assets.
+ */
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-function isBypassed(pathname: string) {
+function isStaticOrInternal(pathname: string) {
   return (
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/api/") ||
     pathname === "/favicon.ico" ||
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml" ||
+    pathname.startsWith("/static/") ||
     pathname.startsWith("/assets/") ||
-    pathname.startsWith("/images/") ||
-    pathname.startsWith("/static/")
+    pathname.startsWith("/images/")
   )
 }
 
-type HostType = "landing" | "app" | "admin"
-
-function getHostType(host: string | null): HostType {
-  const h = (host || "").toLowerCase()
-
-  // local dev convenience
-  // - merceton.localhost:3000 -> landing
-  // - app.localhost:3000 -> app
-  // - admin.localhost:3000 -> admin
-  if (h.startsWith("admin.")) return "admin"
-  if (h.startsWith("app.")) return "app"
+function getHostType(host: string | null): "landing" | "app" | "admin" {
+  if (!host) return "landing"
+  if (host.startsWith("admin.")) return "admin"
+  if (host.startsWith("app.")) return "app"
   return "landing"
 }
 
-function rewriteToGroup(req: NextRequest, group: HostType) {
-  const url = req.nextUrl.clone()
-  const prefix = group === "admin" ? "/(admin)" : group === "app" ? "/(app)" : "/(landing)"
-  url.pathname = `${prefix}${url.pathname}`
-  return NextResponse.rewrite(url)
-}
-
 export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl
-  const hostType = getHostType(req.headers.get("host"))
+  const url = req.nextUrl
+  const { pathname } = url
+  const host = req.headers.get("host")
 
-  if (isBypassed(pathname)) return NextResponse.next()
+  // Skip Next internals, APIs, and static assets
+  if (isStaticOrInternal(pathname)) {
+    return NextResponse.next()
+  }
 
-  // Prevent direct access to wrong areas by host
-  // Root domain is LANDING only
-  if (hostType === "landing") {
-    if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
-      return NextResponse.redirect(new URL("/", req.url))
+  const hostType = getHostType(host)
+
+  // Decide route-group prefix based on host
+  let prefix: "/(landing)" | "/(app)" | "/(admin)"
+  switch (hostType) {
+    case "admin":
+      prefix = "/(admin)"
+      break
+    case "app":
+      prefix = "/(app)"
+      break
+    default:
+      prefix = "/(landing)"
+  }
+
+  // Rewrite into route group while keeping path
+  const rewrittenUrl = req.nextUrl.clone()
+  rewrittenUrl.pathname = `${prefix}${pathname}`
+
+  let response = NextResponse.rewrite(rewrittenUrl)
+
+  // Protected areas:
+  // - app host: /dashboard and related authenticated pages
+  // - admin host: /admin and /admin/... routes
+  const isAppProtected =
+    hostType === "app" && pathname.startsWith("/dashboard")
+  const isAdminProtected =
+    hostType === "admin" && (pathname === "/" || pathname.startsWith("/admin"))
+  const needsAuth = isAppProtected || isAdminProtected
+
+  // If Supabase env vars are missing, skip auth gate (do not throw)
+  if (!needsAuth || !supabaseUrl || !supabaseAnonKey) {
+    if (
+      needsAuth &&
+      process.env.NODE_ENV === "development" &&
+      (!supabaseUrl || !supabaseAnonKey)
+    ) {
+      console.warn(
+        "[middleware] Supabase env vars missing; auth gate skipped. Route-level guards must handle auth."
+      )
     }
+    return response
   }
 
-  // Optional: force home redirect per subdomain (nice UX)
-  if (hostType === "app" && pathname === "/") {
-    return NextResponse.redirect(new URL("/dashboard", req.url))
-  }
-  if (hostType === "admin" && pathname === "/") {
-    return NextResponse.redirect(new URL("/admin", req.url))
-  }
-
-  // Decide if auth is required (tune these)
-  const needsAuth =
-    (hostType === "app" && pathname.startsWith("/dashboard")) ||
-    (hostType === "admin" && pathname.startsWith("/admin"))
-
-  // Always rewrite to correct route group (this is the key part)
-  let response = rewriteToGroup(req, hostType)
-
-  // If auth not required, done
-  if (!needsAuth) return response
-
-  // Never crash middleware if env is missing
-  if (!supabaseUrl || !supabaseAnonKey) return response
-
-  // Supabase session refresh + user check (edge-safe)
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      get(name: string) {
-        return req.cookies.get(name)?.value
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        get(name: string) {
+          return req.cookies.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          // Always use path "/" so sessions are shared correctly
+          response.cookies.set({ name, value, ...options, path: "/" })
+        },
+        remove(name: string, options: any) {
+          response.cookies.set({ name, value: "", ...options, path: "/" })
+        },
       },
-      set(name: string, value: string, options: any) {
-        response.cookies.set({ name, value, ...options, path: "/" })
-      },
-      remove(name: string, options: any) {
-        response.cookies.set({ name, value: "", ...options, path: "/" })
-      },
-    },
-  })
+    })
 
-  const { data } = await supabase.auth.getUser()
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
 
-  if (!data?.user) {
-    const redirectPath = hostType === "admin" ? "/admin/sign-in" : "/sign-in"
-    const redirectUrl = new URL(redirectPath, req.url)
-    redirectUrl.searchParams.set("next", pathname)
-    return NextResponse.redirect(redirectUrl)
+    if (error && process.env.NODE_ENV === "development") {
+      console.warn("[middleware] Supabase auth.getUser error:", error.message)
+    }
+
+    if (!user) {
+      // Use appropriate sign-in target
+      const redirectPath =
+        hostType === "admin" ? "/admin/sign-in" : "/sign-in"
+      const redirectUrl = new URL(redirectPath, req.url)
+      redirectUrl.searchParams.set("next", pathname)
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    // Authenticated; proceed with rewritten response
+    return response
+  } catch (err) {
+    // Never crash middleware; allow request to pass and rely on route-level checks
+    if (process.env.NODE_ENV === "development") {
+      console.error("[middleware] Unexpected error in middleware, allowing request through:", err)
+    }
+    return response
   }
-
-  return response
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/|api/|favicon.ico|robots.txt|sitemap.xml|assets/|images/|static/).*)",
+    // Apply middleware to all non-static, non-API routes
+    "/((?!_next/|api/|favicon.ico|robots.txt|sitemap.xml|static/|assets/|images/).*)",
   ],
 }
