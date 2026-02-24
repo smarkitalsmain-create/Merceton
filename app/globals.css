@@ -28,6 +28,12 @@
     --success: 142 72% 45%; /* #22C55E */
     --success-foreground: 0 0% 100%;
     --radius: 0.5rem;
+
+    /* Marketing hero tokens */
+    --hero-bg: 230 30% 6%;
+    --hero-foreground: 0 0% 98%;
+    --hero-muted: 230 15% 65%;
+    --section-alt: 230 20% 97%;
   }
 
   .dark {
@@ -61,3 +67,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .text-gradient-purple {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(262 80% 55%), hsl(280 70% 60%));
+  }
+
+  .bg-hero {
+    background: linear-gradient(180deg, hsl(230 30% 6%) 0%, hsl(250 35% 12%) 100%);
+  }
+
+  .bg-section-alt {
+    background-color: hsl(var(--section-alt));
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 60px -12px hsl(262 80% 55% / 0.35);
+  }
+}
+
