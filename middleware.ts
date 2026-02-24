@@ -1,121 +1,109 @@
-// middleware.ts
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 
-/**
- * Edge-safe middleware for Supabase session refresh + minimal auth gate.
- *
- * - No Prisma or other Node-only imports.
- * - Only checks Supabase session via cookies.
- * - Protects:
- *   - app host: /dashboard (merchant SaaS)
- *   - admin host: /admin (super admin console)
- * - Skips /api, /_next, and static assets.
- */
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-function isStaticOrInternal(pathname: string) {
+function isBypassed(pathname: string) {
   return (
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/api/") ||
     pathname === "/favicon.ico" ||
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml" ||
-    pathname.startsWith("/static/") ||
     pathname.startsWith("/assets/") ||
-    pathname.startsWith("/images/")
+    pathname.startsWith("/images/") ||
+    pathname.startsWith("/static/")
   )
 }
 
-function getHostType(host: string | null): "app" | "admin" | "other" {
-  if (!host) return "other"
-  if (host.startsWith("admin.")) return "admin"
-  if (host.startsWith("app.")) return "app"
-  return "other"
+type HostType = "landing" | "app" | "admin"
+
+function getHostType(host: string | null): HostType {
+  const h = (host || "").toLowerCase()
+
+  // local dev convenience
+  // - merceton.localhost:3000 -> landing
+  // - app.localhost:3000 -> app
+  // - admin.localhost:3000 -> admin
+  if (h.startsWith("admin.")) return "admin"
+  if (h.startsWith("app.")) return "app"
+  return "landing"
+}
+
+function rewriteToGroup(req: NextRequest, group: HostType) {
+  const url = req.nextUrl.clone()
+  const prefix = group === "admin" ? "/(admin)" : group === "app" ? "/(app)" : "/(landing)"
+  url.pathname = `${prefix}${url.pathname}`
+  return NextResponse.rewrite(url)
 }
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
-  const host = req.headers.get("host")
-  const hostType = getHostType(host)
+  const hostType = getHostType(req.headers.get("host"))
 
-  // Skip Next internals, APIs, and static assets
-  if (isStaticOrInternal(pathname)) {
-    return NextResponse.next()
-  }
+  if (isBypassed(pathname)) return NextResponse.next()
 
-  // Determine if this route requires auth
-  const isAppProtected =
-    hostType === "app" && pathname.startsWith("/dashboard")
-  const isAdminProtected =
-    hostType === "admin" && (pathname === "/" || pathname.startsWith("/admin"))
-  const needsAuth = isAppProtected || isAdminProtected
-
-  // If no Supabase env, skip auth gate (never throw in middleware)
-  if (!needsAuth || !supabaseUrl || !supabaseAnonKey) {
-    if (
-      needsAuth &&
-      process.env.NODE_ENV === "development" &&
-      (!supabaseUrl || !supabaseAnonKey)
-    ) {
-      console.warn(
-        "[middleware] Supabase env vars missing; auth gate skipped. Route-level guards must handle auth."
-      )
+  // Prevent direct access to wrong areas by host
+  // Root domain is LANDING only
+  if (hostType === "landing") {
+    if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
+      return NextResponse.redirect(new URL("/", req.url))
     }
-    return NextResponse.next()
   }
 
-  let response = NextResponse.next()
+  // Optional: force home redirect per subdomain (nice UX)
+  if (hostType === "app" && pathname === "/") {
+    return NextResponse.redirect(new URL("/dashboard", req.url))
+  }
+  if (hostType === "admin" && pathname === "/") {
+    return NextResponse.redirect(new URL("/admin", req.url))
+  }
 
-  try {
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        get(name: string) {
-          return req.cookies.get(name)?.value
-        },
-        set(name: string, value: string, options: any) {
-          response.cookies.set({ name, value, ...options, path: "/" })
-        },
-        remove(name: string, options: any) {
-          response.cookies.set({ name, value: "", ...options, path: "/" })
-        },
+  // Decide if auth is required (tune these)
+  const needsAuth =
+    (hostType === "app" && pathname.startsWith("/dashboard")) ||
+    (hostType === "admin" && pathname.startsWith("/admin"))
+
+  // Always rewrite to correct route group (this is the key part)
+  let response = rewriteToGroup(req, hostType)
+
+  // If auth not required, done
+  if (!needsAuth) return response
+
+  // Never crash middleware if env is missing
+  if (!supabaseUrl || !supabaseAnonKey) return response
+
+  // Supabase session refresh + user check (edge-safe)
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return req.cookies.get(name)?.value
       },
-    })
+      set(name: string, value: string, options: any) {
+        response.cookies.set({ name, value, ...options, path: "/" })
+      },
+      remove(name: string, options: any) {
+        response.cookies.set({ name, value: "", ...options, path: "/" })
+      },
+    },
+  })
 
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
+  const { data } = await supabase.auth.getUser()
 
-    if (error && process.env.NODE_ENV === "development") {
-      console.warn("[middleware] Supabase auth.getUser error:", error.message)
-    }
-
-    if (!user) {
-      const redirectPath =
-        hostType === "admin" ? "/admin/sign-in" : "/sign-in"
-      const redirectUrl = new URL(redirectPath, req.url)
-      redirectUrl.searchParams.set("next", pathname)
-      return NextResponse.redirect(redirectUrl)
-    }
-
-    // User is authenticated; refresh cookies and allow request
-    return response
-  } catch (err) {
-    // Never crash middleware; in case of error, allow request to continue
-    if (process.env.NODE_ENV === "development") {
-      console.error("[middleware] Unexpected error, allowing request through:", err)
-    }
-    return response
+  if (!data?.user) {
+    const redirectPath = hostType === "admin" ? "/admin/sign-in" : "/sign-in"
+    const redirectUrl = new URL(redirectPath, req.url)
+    redirectUrl.searchParams.set("next", pathname)
+    return NextResponse.redirect(redirectUrl)
   }
+
+  return response
 }
 
 export const config = {
   matcher: [
-    // Apply middleware to all non-static, non-API routes
-    "/((?!_next/|api/|favicon.ico|robots.txt|sitemap.xml|static/|assets/|images/).*)",
+    "/((?!_next/|api/|favicon.ico|robots.txt|sitemap.xml|assets/|images/|static/).*)",
   ],
 }
