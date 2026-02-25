@@ -96,10 +96,23 @@ export function MerchantSummaryTab({ merchant, stats }: MerchantSummaryTabProps)
           }),
         })
 
-        const data = await res.json()
+        const text = await res.text()
+        let data: any = null
+        if (text && text.trim().length > 0) {
+          try {
+            data = JSON.parse(text)
+          } catch {
+            // ignore parse errors; will fall back to generic message
+          }
+        }
 
-        if (!res.ok) {
-          throw new Error(data.error || "Failed to put merchant on hold")
+        if (!res.ok || data?.ok === false) {
+          const message =
+            data?.error?.message ||
+            data?.error ||
+            data?.message ||
+            `Failed to put merchant on hold (${res.status})`
+          throw new Error(message)
         }
 
         toast({
