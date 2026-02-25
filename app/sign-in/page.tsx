@@ -3,11 +3,27 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { Store, TrendingUp, CreditCard, Zap } from "lucide-react"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
-import { AuthShell } from "@/components/auth/AuthShell"
+import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+
+const BULLETS = [
+  { icon: Store, text: "Your store, your brand" },
+  { icon: TrendingUp, text: "Sell and scale with one dashboard" },
+  { icon: CreditCard, text: "Transparent fees, weekly payouts" },
+  { icon: Zap, text: "Go live in minutes, no code" },
+]
+
+const TESTIMONIAL = {
+  quote: "We went from idea to first sale in a weekend. Merceton just works.",
+  author: "Founder",
+  role: "D2C brand",
+}
+
+const STATS = ["Weekly payouts", "Zero code setup", "Custom domain"]
 
 export default function SignInPage() {
   const router = useRouter()
@@ -43,11 +59,12 @@ export default function SignInPage() {
   }
 
   return (
-    <AuthShell
-      variant="merchant"
-      mode="signin"
+    <AuthSplitLayout
       title="Sign in"
       subtitle="Enter your email and password to access your dashboard."
+      bullets={BULLETS}
+      testimonial={TESTIMONIAL}
+      stats={STATS}
       footerLink={{
         label: "Don't have an account?",
         href: "/sign-up",
@@ -55,20 +72,8 @@ export default function SignInPage() {
       }}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">Continue with email</span>
-          </div>
-        </div>
-
         {error && (
-          <p
-            className="text-sm text-destructive"
-            role="alert"
-          >
+          <p className="text-sm text-destructive" role="alert">
             {error}
           </p>
         )}
@@ -117,6 +122,6 @@ export default function SignInPage() {
           {loading ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-    </AuthShell>
+    </AuthSplitLayout>
   )
 }

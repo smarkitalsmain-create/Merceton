@@ -2,12 +2,29 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { Store, TrendingUp, CreditCard, Zap, Shield } from "lucide-react"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 import { getSiteUrl } from "@/lib/site"
-import { AuthShell } from "@/components/auth/AuthShell"
+import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+
+const BULLETS = [
+  { icon: Store, text: "Your store, your brand" },
+  { icon: TrendingUp, text: "Sell and scale with one dashboard" },
+  { icon: CreditCard, text: "Transparent fees, weekly payouts" },
+  { icon: Zap, text: "Go live in minutes, no code" },
+  { icon: Shield, text: "Secure payments and payouts" },
+]
+
+const TESTIMONIAL = {
+  quote: "We went from idea to first sale in a weekend. Merceton just works.",
+  author: "Founder",
+  role: "D2C brand",
+}
+
+const STATS = ["Weekly payouts", "Zero code setup", "Custom domain"]
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
@@ -53,11 +70,12 @@ export default function SignUpPage() {
   }
 
   return (
-    <AuthShell
-      variant="merchant"
-      mode="signup"
+    <AuthSplitLayout
       title="Create account"
       subtitle="Enter your details to get started."
+      bullets={BULLETS}
+      testimonial={TESTIMONIAL}
+      stats={STATS}
       footerLink={{
         label: "Already have an account?",
         href: "/sign-in",
@@ -65,28 +83,13 @@ export default function SignUpPage() {
       }}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">Continue with email</span>
-          </div>
-        </div>
-
         {error && (
-          <p
-            className="text-sm text-destructive"
-            role="alert"
-          >
+          <p className="text-sm text-destructive" role="alert">
             {error}
           </p>
         )}
         {message && (
-          <p
-            className="text-sm text-green-600 dark:text-green-500"
-            role="status"
-          >
+          <p className="text-sm text-green-600 dark:text-green-500" role="status">
             {message}
           </p>
         )}
@@ -141,6 +144,6 @@ export default function SignUpPage() {
           {loading ? "Creating account…" : "Sign up"}
         </Button>
       </form>
-    </AuthShell>
+    </AuthSplitLayout>
   )
 }
