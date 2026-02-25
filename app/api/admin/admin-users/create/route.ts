@@ -3,6 +3,7 @@ import { requireAdminForApi } from "@/lib/admin-auth"
 import { featureFlags } from "@/lib/featureFlags"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 export async function POST() {
   const actor = await requireAdminForApi()
@@ -14,7 +15,7 @@ export async function POST() {
     )
   }
   return NextResponse.json(
-    { error: "Not implemented yet" },
-    { status: 501 }
+    { error: "Admin user creation is not configured" },
+    { status: 503 }
   )
 }

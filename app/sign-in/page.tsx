@@ -4,6 +4,10 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
+import { AuthShell } from "@/components/auth/AuthShell"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -19,79 +23,100 @@ export default function SignInPage() {
 
     try {
       const supabase = createSupabaseBrowserClient()
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error: err } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) {
-        setError(error.message)
+      if (err) {
+        setError(err.message)
         return
       }
 
-      // Redirect to dashboard on success
       router.push("/dashboard")
       router.refresh()
-    } catch (err: any) {
-      setError(err?.message ?? "Unknown error")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded border bg-card p-6 shadow-sm"
-      >
-        <h1 className="text-2xl font-semibold">Sign in</h1>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <div>
-          <label className="block text-sm font-medium" htmlFor="email">
-            Email
-          </label>
-          <input
-            id="email"
+    <AuthShell
+      variant="merchant"
+      mode="signin"
+      title="Sign in"
+      subtitle="Enter your email and password to access your dashboard."
+      footerLink={{
+        label: "Don't have an account?",
+        href: "/sign-up",
+        linkText: "Sign up",
+      }}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-border" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-card px-2 text-muted-foreground">Continue with email</span>
+          </div>
+        </div>
+
+        {error && (
+          <p
+            className="text-sm text-destructive"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="signin-email">Email</Label>
+          <Input
+            id="signin-email"
             type="email"
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            autoComplete="email"
+            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={loading}
+            className="bg-background"
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium" htmlFor="password">
-            Password
-          </label>
-          <input
-            id="password"
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="signin-password">Password</Label>
+            <Link
+              href="/forgot-password"
+              className="text-xs text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+            >
+              Forgot password?
+            </Link>
+          </div>
+          <Input
+            id="signin-password"
             type="password"
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            disabled={loading}
+            className="bg-background"
           />
         </div>
-        <div className="text-right">
-          <Link href="/forgot-password" className="text-xs text-primary underline">
-            Forgot password?
-          </Link>
-        </div>
-        <button
+        <Button
           type="submit"
+          className="w-full"
           disabled={loading}
-          className="w-full rounded bg-black py-2 text-sm font-medium text-white disabled:opacity-60"
+          aria-busy={loading}
         >
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-        <p className="text-xs text-muted-foreground text-center">
-          Don&apos;t have an account?{" "}
-          <Link href="/sign-up" className="text-primary underline">
-            Sign up
-          </Link>
-        </p>
+          {loading ? "Signing in…" : "Sign in"}
+        </Button>
       </form>
-    </div>
+    </AuthShell>
   )
 }

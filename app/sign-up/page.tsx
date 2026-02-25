@@ -3,6 +3,11 @@
 import { useState } from "react"
 import Link from "next/link"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
+import { getSiteUrl } from "@/lib/site"
+import { AuthShell } from "@/components/auth/AuthShell"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
@@ -26,92 +31,116 @@ export default function SignUpPage() {
 
     try {
       const supabase = createSupabaseBrowserClient()
-      const { error } = await supabase.auth.signUp({
+      const { error: err } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo:
-            typeof window !== "undefined"
-              ? `${window.location.origin}/auth/callback`
-              : undefined,
+          emailRedirectTo: `${getSiteUrl()}/auth/callback`,
         },
       })
 
-      if (error) {
-        setError(error.message)
+      if (err) {
+        setError(err.message)
         return
       }
 
       setMessage("Check your email to confirm your account.")
-    } catch (err: any) {
-      setError(err?.message ?? "Unknown error")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded border bg-card p-6 shadow-sm"
-      >
-        <h1 className="text-2xl font-semibold">Create account</h1>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {message && <p className="text-sm text-green-600">{message}</p>}
-        <div>
-          <label className="block text-sm font-medium" htmlFor="email">
-            Email
-          </label>
-          <input
-            id="email"
+    <AuthShell
+      variant="merchant"
+      mode="signup"
+      title="Create account"
+      subtitle="Enter your details to get started."
+      footerLink={{
+        label: "Already have an account?",
+        href: "/sign-in",
+        linkText: "Sign in",
+      }}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-border" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-card px-2 text-muted-foreground">Continue with email</span>
+          </div>
+        </div>
+
+        {error && (
+          <p
+            className="text-sm text-destructive"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+        {message && (
+          <p
+            className="text-sm text-green-600 dark:text-green-500"
+            role="status"
+          >
+            {message}
+          </p>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="signup-email">Email</Label>
+          <Input
+            id="signup-email"
             type="email"
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            autoComplete="email"
+            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={loading}
+            className="bg-background"
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium" htmlFor="password">
-            Password
-          </label>
-          <input
-            id="password"
+        <div className="space-y-2">
+          <Label htmlFor="signup-password">Password</Label>
+          <Input
+            id="signup-password"
             type="password"
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            disabled={loading}
+            className="bg-background"
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium" htmlFor="confirmPassword">
-            Confirm Password
-          </label>
-          <input
-            id="confirmPassword"
+        <div className="space-y-2">
+          <Label htmlFor="signup-confirm">Confirm password</Label>
+          <Input
+            id="signup-confirm"
             type="password"
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            autoComplete="new-password"
+            placeholder="Re-enter password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
+            disabled={loading}
+            className="bg-background"
           />
         </div>
-        <button
+        <Button
           type="submit"
+          className="w-full"
           disabled={loading}
-          className="w-full rounded bg-black py-2 text-sm font-medium text-white disabled:opacity-60"
+          aria-busy={loading}
         >
-          {loading ? "Creating..." : "Sign up"}
-        </button>
-        <p className="text-xs text-muted-foreground text-center">
-          Already have an account?{" "}
-          <Link href="/sign-in" className="text-primary underline">
-            Sign in
-          </Link>
-        </p>
+          {loading ? "Creating account…" : "Sign up"}
+        </Button>
       </form>
-    </div>
+    </AuthShell>
   )
 }

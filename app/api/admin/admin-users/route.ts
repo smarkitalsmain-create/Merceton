@@ -3,8 +3,9 @@ import { requireAdminForApi } from "@/lib/admin-auth"
 import { featureFlags } from "@/lib/featureFlags"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
-async function stub() {
+export async function GET() {
   const actor = await requireAdminForApi()
   if (actor instanceof NextResponse) return actor
   if (!featureFlags.adminAdminUsers) {
@@ -13,16 +14,5 @@ async function stub() {
       { status: 503 }
     )
   }
-  return NextResponse.json(
-    { error: "Not implemented yet" },
-    { status: 501 }
-  )
-}
-
-export async function GET() {
-  return stub()
-}
-
-export async function POST() {
-  return stub()
+  return NextResponse.json([])
 }

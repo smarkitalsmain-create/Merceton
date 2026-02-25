@@ -40,7 +40,8 @@
     "e2e:headed": "playwright test --headed",
     "e2e:ui": "playwright test --ui",
     "check:full": "npm run lint && npm run smoke:system && npm run test:unit && npm run test:e2e",
-    "deep-smoke": "tsx scripts/system-deep-smoke.ts"
+    "deep-smoke": "tsx scripts/system-deep-smoke.ts",
+    "prepush:guard": "node scripts/guard-no-stubs.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",

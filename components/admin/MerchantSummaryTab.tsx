@@ -140,14 +140,26 @@ export function MerchantSummaryTab({ merchant, stats }: MerchantSummaryTabProps)
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            notes: releaseNotes.trim() || undefined,
             reasonText: releaseNotes.trim() || undefined,
           }),
         })
 
-        const data = await res.json()
+        const raw = await res.text()
+        let data: { ok?: boolean; error?: string | { code?: string; message?: string } } = {}
+        try {
+          if (raw.trim()) data = JSON.parse(raw)
+        } catch {
+          // ignore
+        }
 
         if (!res.ok) {
-          throw new Error(data.error || "Failed to release hold")
+          const msg =
+            (typeof data.error === "object" && data.error?.message) ||
+            (typeof data.error === "string" ? data.error : null) ||
+            (data as { message?: string }).message ||
+            "Failed to release hold"
+          throw new Error(msg)
         }
 
         toast({
@@ -157,10 +169,10 @@ export function MerchantSummaryTab({ merchant, stats }: MerchantSummaryTabProps)
         setReleaseDialogOpen(false)
         setReleaseNotes("")
         router.refresh()
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast({
           title: "Error",
-          description: error.message || "Failed to release hold",
+          description: error instanceof Error ? error.message : "Failed to release hold",
           variant: "destructive",
         })
       }
@@ -178,10 +190,21 @@ export function MerchantSummaryTab({ merchant, stats }: MerchantSummaryTabProps)
           }),
         })
 
-        const data = await res.json()
+        const raw = await res.text()
+        let data: { ok?: boolean; error?: string | { code?: string; message?: string } } = {}
+        try {
+          if (raw.trim()) data = JSON.parse(raw)
+        } catch {
+          // ignore
+        }
 
         if (!res.ok) {
-          throw new Error(data.error || "Failed to approve KYC")
+          const msg =
+            (typeof data.error === "object" && data.error?.message) ||
+            (typeof data.error === "string" ? data.error : null) ||
+            (data as { message?: string }).message ||
+            "Failed to approve KYC"
+          throw new Error(msg)
         }
 
         toast({
@@ -191,10 +214,10 @@ export function MerchantSummaryTab({ merchant, stats }: MerchantSummaryTabProps)
         setKycDialogOpen(false)
         setKycNote("")
         router.refresh()
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast({
           title: "Error",
-          description: error.message || "Failed to approve KYC",
+          description: error instanceof Error ? error.message : "Failed to approve KYC",
           variant: "destructive",
         })
       }
