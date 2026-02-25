@@ -43,11 +43,14 @@ export default function AuditLogsPage() {
       if (filters.endDate) params.set("endDate", filters.endDate)
       params.set("limit", "100")
 
-      const res = await fetch(`/api/admin/audit-logs?${params}`)
-      if (!res.ok) throw new Error("Failed to load logs")
+      const res = await fetch(`/api/admin/audit-logs?${params}`, { cache: "no-store" })
       const data = await res.json()
-      setLogs(data.logs)
-      setTotal(data.total)
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Failed to load logs")
+      }
+      const logsData = Array.isArray(data) ? data : data.logs ?? []
+      setLogs(Array.isArray(logsData) ? logsData : [])
+      setTotal(typeof data.total === "number" ? data.total : Array.isArray(logsData) ? logsData.length : 0)
     } catch (error) {
       console.error("Error loading logs:", error)
     } finally {
@@ -156,7 +159,7 @@ export default function AuditLogsPage() {
         <CardContent>
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">Loading...</div>
-          ) : logs.length === 0 ? (
+      ) : !Array.isArray(logs) || logs.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p>No audit logs found</p>

@@ -3,18 +3,12 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 import { NextRequest, NextResponse } from "next/server"
-import { validateCoupon, calculateDiscount } from "@/lib/coupons/validation"
+import { canUseFeature, FeatureDeniedError, featureDeniedResponse } from "@/lib/features"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 
 /**
  * GET /api/coupons/validate
- * 
- * Validate a coupon code and return discount amount
- * 
- * Query params:
- * - code: Coupon code
- * - merchantId: Merchant ID
- * - amount: Order amount in paise
- * - email: Customer email (optional)
+ * Requires G_COUPONS for the merchant.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -31,44 +25,21 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const orderAmountInPaise = parseInt(amount, 10)
-    if (isNaN(orderAmountInPaise) || orderAmountInPaise <= 0) {
+    const canUse = await canUseFeature(merchantId as any, GROWTH_FEATURE_KEYS.G_COUPONS)
+    if (!canUse) {
+      // Feature gating disabled – treat as not enabled
       return NextResponse.json(
-        { error: "Invalid amount" },
-        { status: 400 }
+        { valid: false, reason: "NOT_ENABLED" },
+        { status: 200 }
       )
     }
 
-    // Validate coupon
-    const validation = await validateCoupon(
-      merchantId,
-      code,
-      orderAmountInPaise,
-      email || undefined
+    // Coupons feature is logically enabled, but database is not provisioned.
+    // Always return NOT_ENABLED so clients can handle gracefully.
+    return NextResponse.json(
+      { valid: false, reason: "NOT_ENABLED" },
+      { status: 200 }
     )
-
-    if (!validation.isValid || !validation.coupon) {
-      return NextResponse.json(
-        {
-          valid: false,
-          error: validation.error || "Invalid coupon code",
-        },
-        { status: 200 } // Return 200 even for invalid coupons (client handles it)
-      )
-    }
-
-    // Calculate discount
-    const discount = calculateDiscount(validation.coupon, orderAmountInPaise)
-
-    return NextResponse.json({
-      valid: true,
-      coupon: {
-        code: validation.coupon.code,
-        type: validation.coupon.type,
-      },
-      discountAmount: discount.discountAmount,
-      finalAmount: discount.finalAmount,
-    })
   } catch (error) {
     console.error("Coupon validation error:", error)
     return NextResponse.json(

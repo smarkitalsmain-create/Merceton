@@ -1,12 +1,11 @@
 import { requireMerchant } from "@/lib/auth"
-import { assertFeature } from "@/lib/features"
+import { canUseFeature } from "@/lib/gating/canUse"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 import { AnalyticsDashboard } from "@/components/analytics/AnalyticsDashboard"
 
 export default async function AnalyticsPage() {
   const merchant = await requireMerchant()
-
-  // Check feature access
-  await assertFeature(merchant.id, "ANALYTICS_BASIC", "/dashboard/analytics")
+  const hasAdvAnalytics = await canUseFeature(merchant.id, GROWTH_FEATURE_KEYS.G_ADV_ANALYTICS)
 
   return (
     <div className="space-y-6">
@@ -17,7 +16,7 @@ export default async function AnalyticsPage() {
         </p>
       </div>
 
-      <AnalyticsDashboard />
+      <AnalyticsDashboard showAdvanced={hasAdvAnalytics} />
     </div>
   )
 }

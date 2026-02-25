@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation"
 import { requireMerchant } from "@/lib/auth"
+import { assertFeature, FeatureDeniedError } from "@/lib/features"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 import { getCoupons } from "@/app/actions/coupons"
 import { CouponsList } from "@/components/marketing/CouponsList"
 import { Button } from "@/components/ui/button"
@@ -6,7 +9,13 @@ import Link from "next/link"
 import { Plus } from "lucide-react"
 
 export default async function CouponsPage() {
-  await requireMerchant()
+  const merchant = await requireMerchant()
+  try {
+    await assertFeature(merchant.id, GROWTH_FEATURE_KEYS.G_COUPONS, "/dashboard/marketing/coupons")
+  } catch (e) {
+    if (e instanceof FeatureDeniedError) redirect("/dashboard/upgrade")
+    throw e
+  }
 
   const coupons = await getCoupons()
 

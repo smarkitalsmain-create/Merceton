@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -46,10 +47,15 @@ const priorityColors: Record<TicketPriority, string> = {
 }
 
 export function TicketDetail({ initialTicket }: TicketDetailProps) {
+  const router = useRouter()
   const { toast } = useToast()
   const [isPending, startTransition] = useTransition()
   const [ticket, setTicket] = useState(initialTicket)
   const [replyMessage, setReplyMessage] = useState("")
+
+  useEffect(() => {
+    setTicket(initialTicket)
+  }, [initialTicket])
 
   const canReply = ticket.status !== TicketStatus.CLOSED
 
@@ -71,17 +77,12 @@ export function TicketDetail({ initialTicket }: TicketDetailProps) {
         })
 
         if (result.success) {
-          // Refresh ticket data
-          const response = await fetch(`/api/tickets/${ticket.id}`)
-          if (response.ok) {
-            const updatedTicket = await response.json()
-            setTicket(updatedTicket)
-          }
           setReplyMessage("")
           toast({
             title: "Reply sent",
             description: "Your reply has been sent successfully.",
           })
+          router.refresh()
         }
       } catch (error: any) {
         toast({

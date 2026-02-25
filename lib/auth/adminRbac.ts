@@ -75,10 +75,9 @@ export async function requireSuperAdmin() {
 
 /**
  * Get admin user by Supabase userId
- * NOTE: AdminUser model removed - using allowlist-based auth only
+ * NOTE: AdminUser model removed - using allowlist-based auth only. Returns null; use allowlist for super admin.
  */
 export async function getAdminUser(userId: string) {
-  // Admin module disabled - return null
   return null
 }
 

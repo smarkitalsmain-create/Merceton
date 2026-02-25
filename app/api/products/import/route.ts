@@ -5,7 +5,8 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from "next/server"
 import { authorizeRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { assertFeature, getProductLimit } from "@/lib/features"
+import { getProductLimit, canUseFeature, featureDeniedResponse, FeatureDeniedError } from "@/lib/features"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 import {
   validateCsvRow,
   detectDuplicatesWithinFile,
@@ -74,8 +75,10 @@ export async function POST(request: NextRequest) {
     // Authorize request
     const { merchant } = await authorizeRequest()
 
-    // Check feature access
-    await assertFeature(merchant.id, "BULK_PRODUCT_CSV_IMPORT", request.nextUrl.pathname)
+    const allowed = await canUseFeature(merchant.id, GROWTH_FEATURE_KEYS.G_BULK_CSV)
+    if (!allowed) {
+      return featureDeniedResponse(new FeatureDeniedError(GROWTH_FEATURE_KEYS.G_BULK_CSV, true))
+    }
 
     // Parse multipart form data
     const formData = await request.formData()
@@ -199,8 +202,8 @@ export async function POST(request: NextRequest) {
         !duplicatesInDatabase.some((d) => d.rowNumber === r.rowNumber)
     )
 
-    // Check if we'll exceed product limit
-    const wouldExceedLimit = currentProductCount + rowsToInsert.length > productLimit
+    const wouldExceedLimit =
+      productLimit !== null && currentProductCount + rowsToInsert.length > productLimit
 
     if (mode === "all_or_nothing" && (wouldExceedLimit || duplicatesInDatabase.length > 0)) {
       return NextResponse.json(
@@ -222,8 +225,10 @@ export async function POST(request: NextRequest) {
     let skipped = 0
 
     if (rowsToInsert.length > 0) {
-      // Calculate how many we can insert without exceeding limit
-      const maxInsertable = Math.max(0, productLimit - currentProductCount)
+      const maxInsertable =
+        productLimit === null
+          ? rowsToInsert.length
+          : Math.max(0, productLimit - currentProductCount)
       const insertableRows = rowsToInsert.slice(0, maxInsertable)
       skipped = rowsToInsert.length - insertableRows.length
 

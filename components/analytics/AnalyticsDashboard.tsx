@@ -59,7 +59,12 @@ interface ConversionStats {
   note: string
 }
 
-export function AnalyticsDashboard() {
+interface AnalyticsDashboardProps {
+  showAdvanced?: boolean
+}
+
+export function AnalyticsDashboard(props: AnalyticsDashboardProps = {}) {
+  const showAdvanced = props.showAdvanced ?? true
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState(() => {
@@ -78,6 +83,10 @@ export function AnalyticsDashboard() {
   const [conversion, setConversion] = useState<ConversionStats | null>(null)
 
   const loadAnalytics = useCallback(async () => {
+    if (!showAdvanced) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -117,7 +126,7 @@ export function AnalyticsDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, groupBy, toast])
+  }, [dateFrom, dateTo, groupBy, toast, showAdvanced])
 
   useEffect(() => {
     loadAnalytics()
@@ -132,6 +141,19 @@ export function AnalyticsDashboard() {
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
+    )
+  }
+
+  if (!showAdvanced) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Basic Analytics</CardTitle>
+          <CardDescription>
+            Upgrade to Growth to unlock advanced analytics: sales by date, by product, top customers, and conversion metrics.
+          </CardDescription>
+        </CardHeader>
+      </Card>
     )
   }
 

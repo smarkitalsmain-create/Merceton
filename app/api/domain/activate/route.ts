@@ -2,11 +2,24 @@ export const runtime = "nodejs"
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireMerchant } from "@/lib/auth"
+import { assertFeature, FeatureDeniedError } from "@/lib/features"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 import { prisma } from "@/lib/prisma"
 
 export async function POST(request: NextRequest) {
   try {
     const merchant = await requireMerchant()
+    try {
+      await assertFeature(merchant.id, GROWTH_FEATURE_KEYS.G_CUSTOM_DOMAIN, "/api/domain/activate")
+    } catch (e) {
+      if (e instanceof FeatureDeniedError) {
+        return NextResponse.json(
+          { error: "Custom domain is not available on your plan", upgradeRequired: true },
+          { status: 403 }
+        )
+      }
+      throw e
+    }
 
     if (!merchant.customDomain) {
       return NextResponse.json(

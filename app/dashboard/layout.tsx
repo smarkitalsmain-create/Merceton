@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { requireMerchant } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getMerchantOnboarding } from "@/lib/onboarding"
+import { getEffectiveFeatures } from "@/lib/gating/canUse"
 import { DashboardSidebar } from "@/components/DashboardSidebar"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
@@ -42,12 +43,19 @@ export default async function DashboardLayout({
   // Check onboarding status - enforce completion for all dashboard routes except onboarding itself
   const onboarding = await getMerchantOnboarding(merchant.id)
 
+  const features = await getEffectiveFeatures(merchant.id)
+  const enabledFeatureKeys = new Set(
+    Array.from(features.entries())
+      .filter(([, v]) => v.enabled)
+      .map(([k]) => k)
+  )
+
   return (
     <ErrorBoundary>
       <OnboardingGate onboardingStatus={onboarding.onboardingStatus}>
         <div className="min-h-screen bg-background">
           <div className="flex h-screen">
-            <DashboardSidebar />
+            <DashboardSidebar enabledFeatureKeys={enabledFeatureKeys} />
             <div className="flex flex-1 flex-col overflow-hidden">
               <header className="flex h-16 items-center justify-between border-b px-6">
                 <div className="flex items-center gap-4">

@@ -58,7 +58,7 @@ export function PlatformInvoicesClient({ merchants }: PlatformInvoicesClientProp
         from,
         to,
       })
-      const url = `/api/billing/invoice.pdf?${params}`
+      const url = `/api/admin/billing/invoice.pdf?${params}`
       
       // Direct download using window.location.href
       window.location.href = url

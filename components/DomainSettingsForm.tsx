@@ -14,7 +14,7 @@ interface DomainSettingsFormProps {
   merchant: {
     id: string
     customDomain: string | null
-    domainStatus: "PENDING" | "VERIFIED" | "ACTIVE" | "FAILED"
+    domainStatus: "PENDING" | "VERIFIED" | "ACTIVE"
     domainVerificationToken: string | null
     domainVerifiedAt: Date | null
   }
@@ -82,7 +82,7 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
         if (!res.ok) {
           // Handle detailed error messages
           const errorMsg = data.error || "Failed to verify domain"
-          setMerchant((prev) => ({ ...prev, domainStatus: "FAILED" as any }))
+          // Keep status as PENDING in this deployment; show error via toast.
           toast({
             title: "Verification failed",
             description: errorMsg,
@@ -164,13 +164,6 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
             ACTIVE
           </Badge>
         )
-      case "FAILED":
-        return (
-          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-            <XCircle className="mr-1 h-3 w-3" />
-            FAILED
-          </Badge>
-        )
       default:
         return null
     }
@@ -221,7 +214,7 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
               </Button>
             )}
 
-            {merchant.customDomain && (merchant.domainStatus === "PENDING" || merchant.domainStatus === "FAILED") && (
+            {merchant.customDomain && merchant.domainStatus === "PENDING" && (
               <Button onClick={handleVerify} disabled={isPending} variant="outline">
                 {isPending ? (
                   <>
@@ -249,7 +242,7 @@ export function DomainSettingsForm({ merchant: initialMerchant }: DomainSettings
         </CardContent>
       </Card>
 
-      {merchant.customDomain && (merchant.domainStatus === "PENDING" || merchant.domainStatus === "FAILED") && (
+      {merchant.customDomain && merchant.domainStatus === "PENDING" && (
         <Card>
           <CardHeader>
             <CardTitle>DNS Verification Instructions</CardTitle>

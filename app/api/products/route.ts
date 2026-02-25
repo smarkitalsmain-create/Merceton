@@ -3,7 +3,7 @@ export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { authorizeRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { assertFeature, getProductLimit } from "@/lib/features"
+import { getProductLimit } from "@/lib/features"
 
 /**
  * Example API route demonstrating tenant isolation
@@ -57,23 +57,22 @@ export async function POST(request: NextRequest) {
     // Authorize request - ensures user is authenticated and has merchant
     const { merchant } = await authorizeRequest()
 
-    // Enforce product limit feature
+    // Enforce product limit (Starter cap; Growth = unlimited)
     const productLimit = await getProductLimit(merchant.id)
-    
-    // Count existing products
-    const productCount = await prisma.product.count({
-      where: { merchantId: merchant.id },
-    })
-
-    if (productCount >= productLimit) {
+    if (productLimit !== null) {
+      const productCount = await prisma.product.count({
+        where: { merchantId: merchant.id },
+      })
+      if (productCount >= productLimit) {
       return NextResponse.json(
         {
           error: `Product limit reached (${productLimit} products). Upgrade to Growth plan for unlimited products.`,
           upgradeRequired: true,
-          featureKey: "PRODUCT_LIMIT",
+          featureKey: "G_UNLIMITED_PRODUCTS",
         },
         { status: 403 }
       )
+      }
     }
 
     const body = await request.json()

@@ -4,6 +4,8 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireMerchant } from "@/lib/auth"
+import { assertFeature, FeatureDeniedError } from "@/lib/features"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 import { prisma } from "@/lib/prisma"
 import { normalizeDomain, isValidDomainFormat, getVerificationRecordName } from "@/lib/domains/normalize"
 import crypto from "crypto"
@@ -11,6 +13,17 @@ import crypto from "crypto"
 export async function POST(request: NextRequest) {
   try {
     const merchant = await requireMerchant()
+    try {
+      await assertFeature(merchant.id, GROWTH_FEATURE_KEYS.G_CUSTOM_DOMAIN, "/api/domains/add")
+    } catch (e) {
+      if (e instanceof FeatureDeniedError) {
+        return NextResponse.json(
+          { error: "Custom domain is not available on your plan", upgradeRequired: true },
+          { status: 403 }
+        )
+      }
+      throw e
+    }
     const body = await request.json()
     const { customDomain } = body
 
@@ -52,8 +65,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if domain is already taken by another merchant (using unique constraint)
-    const existing = await prisma.merchant.findUnique({
+    // Check if domain is already taken by another merchant (application-level check)
+    const existing = await prisma.merchant.findFirst({
       where: { customDomain: normalized },
     })
 
@@ -67,37 +80,22 @@ export async function POST(request: NextRequest) {
     // Generate verification token (32 character hex string)
     const token = crypto.randomBytes(16).toString("hex")
 
-    // Update merchant in transaction with domain claim
-    const updated = await prisma.$transaction(async (tx) => {
-      // Update merchant
-      const updatedMerchant = await tx.merchant.update({
-        where: { id: merchant.id },
-        data: {
-          customDomain: normalized,
-          domainStatus: "PENDING",
-          domainVerificationToken: token,
-          domainVerifiedAt: null,
-        },
-        select: {
-          id: true,
-          customDomain: true,
-          domainStatus: true,
-          domainVerificationToken: true,
-          domainVerifiedAt: true,
-        },
-      })
-
-      // Create domain claim record for audit
-      await tx.domainClaim.create({
-        data: {
-          domain: normalized,
-          merchantId: merchant.id,
-          status: "PENDING",
-          token,
-        },
-      })
-
-      return updatedMerchant
+    // Update merchant (no domain claim table in this deployment)
+    const updated = await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        customDomain: normalized,
+        domainStatus: "PENDING",
+        domainVerificationToken: token,
+        domainVerifiedAt: null,
+      },
+      select: {
+        id: true,
+        customDomain: true,
+        domainStatus: true,
+        domainVerificationToken: true,
+        domainVerifiedAt: true,
+      },
     })
 
     const recordName = getVerificationRecordName(normalized)

@@ -37,13 +37,15 @@ export default async function ProtectedAdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="flex h-screen">
+    <div className="flex h-screen overflow-hidden bg-background">
+      <aside className="w-64 shrink-0 border-r bg-background">
         <AdminSidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
+      </aside>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="shrink-0 border-b bg-background">
           <AdminHeader email={user.email ?? ""} />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
-        </div>
+        </header>
+        <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>
   )

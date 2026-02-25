@@ -12,6 +12,16 @@ import {
 import { logAdminAction } from "@/lib/admin/audit"
 import { z } from "zod"
 
+/** Generate a unique package code from name (safe for UNIQUE constraint) */
+function generatePackageCode(name: string, suffix?: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    || "pkg"
+  return suffix ? `${base}-${suffix}` : `${base}-${Date.now()}`
+}
+
 /**
  * Create pricing package (super admin only)
  * Always creates as DRAFT status
@@ -26,6 +36,7 @@ export async function createPricingPackage(
   const packageData = await prisma.pricingPackage.create({
     data: {
       name: validated.name,
+      code: generatePackageCode(validated.name),
       description: validated.description || null,
       status: "DRAFT", // Always create as DRAFT
       fixedFeePaise: validated.fixedFeePaise,
@@ -506,6 +517,7 @@ export async function duplicatePricingPackage(
   const newPackage = await prisma.pricingPackage.create({
     data: {
       name: `${existing.name} (Copy)`,
+      code: generatePackageCode(existing.name, "copy"),
       description: existing.description,
       status: "DRAFT",
       fixedFeePaise: existing.fixedFeePaise,

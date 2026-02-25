@@ -9,6 +9,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { FeatureKey, ResolvedFeature, ResolvedFeatures } from "./types"
+import { GROWTH_FEATURE_KEYS_LIST } from "./featureKeys"
 import { FeatureValueType, FeatureOverrideMode } from "@prisma/client"
 
 // Request-scoped cache to avoid repeated DB hits
@@ -23,6 +24,7 @@ const requestCache = new Map<string, ResolvedFeatures>()
  * 3. Default (disabled)
  * 
  * Special case: UNLIMITED_PRODUCTS enabled => PRODUCT_LIMIT treated as Infinity
+ * Returns empty Map if feature tables are missing (e.g. before migration).
  */
 export async function resolveMerchantFeatures(
   merchantId: string
@@ -33,6 +35,18 @@ export async function resolveMerchantFeatures(
     return requestCache.get(cacheKey)!
   }
 
+  let resolved: ResolvedFeatures
+  try {
+    resolved = await resolveMerchantFeaturesUncached(merchantId)
+  } catch (e) {
+    console.error("resolveMerchantFeatures failed (feature tables missing?):", e)
+    resolved = new Map()
+  }
+  requestCache.set(cacheKey, resolved)
+  return resolved
+}
+
+async function resolveMerchantFeaturesUncached(merchantId: string): Promise<ResolvedFeatures> {
   // Load merchant fee config to get package
   const feeConfig = await prisma.merchantFeeConfig.findUnique({
     where: { merchantId },
@@ -72,8 +86,10 @@ export async function resolveMerchantFeatures(
   // Build feature map
   const resolved: ResolvedFeatures = new Map()
 
-  // Get all features from registry
-  const allFeatures = await prisma.feature.findMany()
+  // Only resolve canonical Growth features (9)
+  const allFeatures = (await prisma.feature.findMany()).filter((f) =>
+    GROWTH_FEATURE_KEYS_LIST.includes(f.key as FeatureKey)
+  )
 
   for (const feature of allFeatures) {
     const featureKey = feature.key as FeatureKey
@@ -124,18 +140,6 @@ export async function resolveMerchantFeatures(
       }
     }
   }
-
-  // Special case: UNLIMITED_PRODUCTS
-  if (resolved.get("UNLIMITED_PRODUCTS")?.enabled) {
-    resolved.set("PRODUCT_LIMIT", {
-      enabled: true,
-      value: Infinity,
-      source: resolved.get("UNLIMITED_PRODUCTS")!.source,
-    })
-  }
-
-  // Cache for this request
-  requestCache.set(cacheKey, resolved)
 
   return resolved
 }

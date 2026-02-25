@@ -6,57 +6,27 @@ import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
   Store,
-  Users,
   ShoppingCart,
   CreditCard,
   Wallet,
   Globe,
   Settings,
   FileText,
-  Receipt,
+  Headphones,
+  FileCheck,
 } from "lucide-react"
 
 const navigation = [
-  {
-    name: "Overview",
-    href: "/admin",
-    icon: LayoutDashboard,
-  },
-  {
-    name: "Merchants",
-    href: "/admin/merchants",
-    icon: Store,
-  },
-  {
-    name: "Pricing",
-    href: "/admin/pricing",
-    icon: CreditCard,
-  },
-  {
-    name: "Orders",
-    href: "/admin/orders",
-    icon: ShoppingCart,
-  },
-  {
-    name: "Payouts",
-    href: "/admin/payouts",
-    icon: Wallet,
-  },
-  {
-    name: "Platform Invoices",
-    href: "/admin/platform-invoices",
-    icon: FileText,
-  },
-  {
-    name: "Settings",
-    href: "/admin/settings",
-    icon: Settings,
-  },
-  {
-    name: "Audit Logs",
-    href: "/admin/audit-logs",
-    icon: Settings,
-  },
+  { name: "Overview", href: "/admin", icon: LayoutDashboard },
+  { name: "Merchants", href: "/admin/merchants", icon: Store },
+  { name: "Pricing Packages", href: "/admin/pricing", icon: CreditCard },
+  { name: "Support", href: "/admin/support", icon: Headphones },
+  { name: "Domains", href: "/admin/domains", icon: Globe },
+  { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
+  { name: "Payouts", href: "/admin/payouts", icon: Wallet },
+  { name: "Platform Invoices", href: "/admin/platform-invoices", icon: FileText },
+  { name: "Settings", href: "/admin/settings", icon: Settings },
+  { name: "Audit Logs", href: "/admin/audit-logs", icon: FileCheck },
 ]
 
 export function AdminSidebar() {

@@ -5,7 +5,8 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from "next/server"
 import { authorizeRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { assertFeature } from "@/lib/features"
+import { assertFeature, FeatureDeniedError, featureDeniedResponse } from "@/lib/features"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 
 /**
  * GET /api/analytics/sales-by-date
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     const { merchant } = await authorizeRequest()
 
     // Check feature access
-    await assertFeature(merchant.id, "ANALYTICS_BASIC", request.nextUrl.pathname)
+    await assertFeature(merchant.id, GROWTH_FEATURE_KEYS.G_ADV_ANALYTICS, request.nextUrl.pathname)
 
     const url = new URL(request.url)
     const from = url.searchParams.get("from")
@@ -144,19 +145,12 @@ export async function GET(request: NextRequest) {
     if (error instanceof Error) {
       if (error.message.includes("Unauthorized")) {
         return NextResponse.json(
-          { error: error.message },
-          { status: 403 }
+          { error: { code: "UNAUTHORIZED", message: error.message } },
+          { status: 401 }
         )
       }
-      if (error.message.includes("FeatureDeniedError") || error.message.includes("feature")) {
-        return NextResponse.json(
-          {
-            error: "Analytics is not available on your plan. Upgrade to Growth plan to enable this feature.",
-            upgradeRequired: true,
-            featureKey: "ANALYTICS_BASIC",
-          },
-          { status: 403 }
-        )
+      if (error instanceof FeatureDeniedError) {
+        return featureDeniedResponse(error)
       }
     }
 

@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server"
+import { featureFlags } from "@/lib/featureFlags"
 
 export const runtime = "nodejs"
 
 /**
- * Billing module temporarily disabled
+ * Merchant billing statement CSV. Requires merchant auth at route level if needed.
+ * Stub: returns 501 until implemented.
  */
 export async function GET() {
-  return new Response("Billing module temporarily disabled", { status: 501 })
+  if (!featureFlags.billingStatement) {
+    return NextResponse.json(
+      { error: "Feature disabled by configuration" },
+      { status: 503 }
+    )
+  }
+  return NextResponse.json(
+    { error: "Not implemented yet" },
+    { status: 501 }
+  )
 }

@@ -40,6 +40,7 @@ const addInternalNoteSchema = z.object({
  */
 export async function createTicket(input: z.infer<typeof createTicketSchema>) {
   const { merchant, user } = await authorizeRequest()
+  // Support tickets = Starter baseline (no gating)
   const validated = createTicketSchema.parse(input)
 
   // Create ticket with initial message
@@ -284,7 +285,6 @@ export async function addInternalNote(input: z.infer<typeof addInternalNoteSchem
  */
 export async function getMerchantTickets() {
   const merchant = await requireMerchant()
-
   const tickets = await prisma.ticket.findMany({
     where: { merchantId: merchant.id },
     include: {
@@ -317,6 +317,74 @@ export async function getMerchantTicket(ticketId: string) {
   })
 
   if (!ticket || ticket.merchantId !== merchant.id) {
+    throw new Error("Ticket not found")
+  }
+
+  return ticket
+}
+
+/**
+ * Get all tickets for admin (super admin only)
+ */
+export async function getAdminTickets(filters?: {
+  status?: TicketStatus
+  priority?: TicketPriority
+}) {
+  await requireSuperAdmin()
+
+  const tickets = await prisma.ticket.findMany({
+    where: {
+      ...(filters?.status && { status: filters.status }),
+      ...(filters?.priority && { priority: filters.priority }),
+    },
+    include: {
+      merchant: {
+        select: {
+          id: true,
+          displayName: true,
+          slug: true,
+        },
+      },
+      messages: {
+        orderBy: { createdAt: "asc" },
+        take: 1,
+      },
+      _count: {
+        select: { messages: true },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  })
+
+  return tickets
+}
+
+/**
+ * Get single ticket for admin (super admin only)
+ */
+export async function getAdminTicket(ticketId: string) {
+  await requireSuperAdmin()
+
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: {
+      merchant: {
+        select: {
+          id: true,
+          displayName: true,
+          slug: true,
+        },
+      },
+      messages: {
+        orderBy: { createdAt: "asc" },
+      },
+      internalNotes: {
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  })
+
+  if (!ticket) {
     throw new Error("Ticket not found")
   }
 

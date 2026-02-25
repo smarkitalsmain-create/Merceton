@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server"
+import { requireAdminForApi } from "@/lib/admin-auth"
+import { featureFlags } from "@/lib/featureFlags"
 
 export const runtime = "nodejs"
 
-/**
- * Admin module disabled
- */
+async function stub() {
+  const actor = await requireAdminForApi()
+  if (actor instanceof NextResponse) return actor
+  if (!featureFlags.adminSystemSettings) {
+    return NextResponse.json(
+      { error: "Feature disabled by configuration" },
+      { status: 503 }
+    )
+  }
+  return NextResponse.json(
+    { error: "Not implemented yet" },
+    { status: 501 }
+  )
+}
+
 export async function GET() {
-  return new Response("Admin module disabled", { status: 501 })
+  return stub()
 }
 
 export async function POST() {
-  return new Response("Admin module disabled", { status: 501 })
+  return stub()
 }

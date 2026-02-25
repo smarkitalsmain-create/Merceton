@@ -4,6 +4,8 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireMerchant } from "@/lib/auth"
+import { assertFeature, FeatureDeniedError, featureDeniedResponse } from "@/lib/features"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 import { prisma } from "@/lib/prisma"
 import { getVerificationRecordName } from "@/lib/domains/normalize"
 import dns from "dns"
@@ -19,6 +21,14 @@ const resolveTxt = promisify(dns.resolveTxt)
 export async function POST(request: NextRequest) {
   try {
     const merchant = await requireMerchant()
+    try {
+      await assertFeature(merchant.id, GROWTH_FEATURE_KEYS.G_CUSTOM_DOMAIN, "/api/domains/verify")
+    } catch (e) {
+      if (e instanceof FeatureDeniedError) {
+        return featureDeniedResponse(e)
+      }
+      throw e
+    }
 
     if (!merchant.customDomain || !merchant.domainVerificationToken) {
       return NextResponse.json(
@@ -52,7 +62,7 @@ export async function POST(request: NextRequest) {
       // Update status to FAILED
       await prisma.merchant.update({
         where: { id: merchant.id },
-        data: { domainStatus: "FAILED" },
+        data: { domainStatus: "PENDING" },
       })
 
       return NextResponse.json(
@@ -76,7 +86,7 @@ export async function POST(request: NextRequest) {
       // Token mismatch
       await prisma.merchant.update({
         where: { id: merchant.id },
-        data: { domainStatus: "FAILED" },
+        data: { domainStatus: "PENDING" },
       })
 
       return NextResponse.json(
@@ -92,37 +102,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Verification successful - update status
-    const updated = await prisma.$transaction(async (tx) => {
-      // Update merchant
-      const updatedMerchant = await tx.merchant.update({
-        where: { id: merchant.id },
-        data: {
-          domainStatus: "VERIFIED",
-          domainVerifiedAt: new Date(),
-        },
-        select: {
-          id: true,
-          customDomain: true,
-          domainStatus: true,
-          domainVerificationToken: true,
-          domainVerifiedAt: true,
-        },
-      })
-
-      // Update domain claim
-      await tx.domainClaim.updateMany({
-        where: {
-          domain: domain,
-          merchantId: merchant.id,
-          status: "PENDING",
-        },
-        data: {
-          status: "VERIFIED",
-          verifiedAt: new Date(),
-        },
-      })
-
-      return updatedMerchant
+    const updated = await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        domainStatus: "VERIFIED",
+        domainVerifiedAt: new Date(),
+      },
+      select: {
+        id: true,
+        customDomain: true,
+        domainStatus: true,
+        domainVerificationToken: true,
+        domainVerifiedAt: true,
+      },
     })
 
     return NextResponse.json({

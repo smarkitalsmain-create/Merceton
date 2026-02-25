@@ -1,66 +1,28 @@
 /**
- * Feature Gating Types
- * 
- * Type definitions for the feature gating system.
+ * Feature gating types.
+ * FeatureKey is defined in featureKeys.ts (canonical list).
  */
 
-/**
- * Canonical feature keys
- * Add new features here and in seed-features.ts
- */
-export type FeatureKey =
-  // Starter
-  | "STOREFRONT_SUBDOMAIN"
-  | "BASIC_THEME"
-  | "LOGO_BANNER_UPLOAD"
-  | "PRODUCT_LIMIT"
-  | "ORDERS_DASHBOARD"
-  | "ORDER_STATUS_UPDATE"
-  | "BASIC_CUSTOMER_DETAILS"
-  | "PAYMENTS_RAZORPAY"
-  | "PAYMENT_TRACKING"
-  | "PLATFORM_FEE_DEDUCTION"
-  | "ANALYTICS_BASIC"
-  | "PAYOUTS_WEEKLY"
-  | "LEDGER_SUMMARY_VIEW"
-  // Growth
-  | "CUSTOM_DOMAIN"
-  | "REMOVE_MERCETON_BRANDING"
-  | "THEME_ADVANCED"
-  | "BANNER_SLIDER"
-  | "FEATURED_SECTIONS"
-  | "UNLIMITED_PRODUCTS"
-  | "BULK_PRODUCT_CSV_IMPORT"
-  | "PRODUCT_VARIANTS"
-  | "ANALYTICS_ADVANCED"
-  | "LEDGER_EXPORT_CSV"
-  | "LEDGER_EXPORT_PDF"
-  | "PLATFORM_FEE_BREAKDOWN"
-  | "DEDUCTIONS_VIEW"
-  | "COUPONS"
-  | "DISCOUNT_RULES_BASIC"
-  | "ABANDONED_CART_EMAIL_TRIGGER"
+import type { FeatureKey } from "./featureKeys"
+export type { FeatureKey, GrowthFeatureKey } from "./featureKeys"
+export {
+  GROWTH_FEATURE_KEYS,
+  GROWTH_FEATURE_KEYS_LIST,
+  GROWTH_FEATURES_BY_CATEGORY,
+  isGrowthFeatureKey,
+} from "./featureKeys"
 
-/**
- * Resolved feature state
- */
 export interface ResolvedFeature {
   enabled: boolean
-  value?: any
+  value?: unknown
   source: "package" | "override" | "default"
 }
 
-/**
- * Map of all resolved features for a merchant
- */
 export type ResolvedFeatures = Map<FeatureKey, ResolvedFeature>
 
-/**
- * Feature denied error
- */
 export class FeatureDeniedError extends Error {
   constructor(
-    public featureKey: FeatureKey,
+    public featureKey: string,
     public upgradeRequired: boolean = true,
     message?: string
   ) {

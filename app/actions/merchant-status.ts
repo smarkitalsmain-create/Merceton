@@ -118,16 +118,30 @@ export async function updateMerchantStatus(
     })
 
     // Create status history entry
-    const history = await tx.merchantStatusHistory.create({
+    // Record a status event (account hold/release or KYC approval)
+    let eventType: any = null
+    if (fromAccountStatus !== toAccountStatus) {
+      if (toAccountStatus === "ON_HOLD") {
+        eventType = "HOLD_APPLIED"
+      } else if (fromAccountStatus === "ON_HOLD" && toAccountStatus === "ACTIVE") {
+        eventType = "HOLD_RELEASED"
+      }
+    }
+    if (!eventType && fromKycStatus !== toKycStatus && toKycStatus === "APPROVED") {
+      eventType = "KYC_APPROVED"
+    }
+    // Fallback event type if none matched
+    if (!eventType) {
+      eventType = "HOLD_APPLIED"
+    }
+
+    const history = await tx.merchantStatusEvent.create({
       data: {
         merchantId: validated.merchantId,
-        fromAccountStatus: fromAccountStatus,
-        toAccountStatus: toAccountStatus,
-        fromKycStatus: fromKycStatus,
-        toKycStatus: toKycStatus,
-        reason: validated.holdReasonCode || validated.reason,
-        reasonText: validated.holdReasonText,
-        changedByAdminUserId: actor.userId,
+        eventType,
+        reasonCode: validated.holdReasonCode ?? null,
+        reasonText: validated.holdReasonText ?? validated.reason,
+        createdByUserId: actor.userId,
       },
     })
 
@@ -212,7 +226,7 @@ export async function updateMerchantStatus(
 export async function getMerchantStatusHistory(merchantId: string) {
   await requireAdmin()
 
-  return prisma.merchantStatusHistory.findMany({
+  return prisma.merchantStatusEvent.findMany({
     where: { merchantId },
     orderBy: { createdAt: "desc" },
     include: {

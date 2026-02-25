@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
 import { createPricingPackage, updatePricingPackage } from "@/app/actions/pricing"
+import { updatePricingPackageFeatures } from "@/app/actions/features"
+import { PackageFeatureSelect, type FeatureSelection } from "@/components/admin/PackageFeatureSelect"
 import { useRouter } from "next/navigation"
 import { Save } from "lucide-react"
 
@@ -54,6 +56,7 @@ export function PricingPackageForm({ initialData }: PricingPackageFormProps) {
   // Show status if editing
   const currentStatus = initialData ? (initialData as any).status : "DRAFT"
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [selectedFeatures, setSelectedFeatures] = useState<FeatureSelection[]>([])
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -129,6 +132,17 @@ export function PricingPackageForm({ initialData }: PricingPackageFormProps) {
           result = await updatePricingPackage(initialData.id, data)
         } else {
           result = await createPricingPackage(data)
+          if (result.success && result.package && selectedFeatures.length > 0) {
+            await updatePricingPackageFeatures(
+              result.package.id,
+              selectedFeatures.map((f) => ({
+                featureId: f.featureId,
+                enabled: f.enabled,
+                valueJson: f.enabled ? f.valueJson : undefined,
+              })),
+              formData.reason.trim()
+            )
+          }
         }
 
         if (result.success) {
@@ -385,22 +399,51 @@ export function PricingPackageForm({ initialData }: PricingPackageFormProps) {
             {errors.reason && <p className="text-sm text-destructive">{errors.reason}</p>}
           </div>
 
-          <div className="flex gap-2">
-            <Button type="submit" disabled={isPending}>
-              <Save className="h-4 w-4 mr-2" />
-              {isPending ? "Saving..." : "Save Package"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.back()}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-          </div>
+          {initialData && (
+            <div className="flex gap-2">
+              <Button type="submit" disabled={isPending}>
+                <Save className="h-4 w-4 mr-2" />
+                {isPending ? "Saving..." : "Save Package"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.back()}
+                disabled={isPending}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {!initialData && (
+        <div className="mt-6">
+          <PackageFeatureSelect
+            value={selectedFeatures}
+            onChange={setSelectedFeatures}
+            disabled={isPending}
+          />
+        </div>
+      )}
+
+      {!initialData && (
+        <div className="mt-6 flex gap-2">
+          <Button type="submit" disabled={isPending}>
+            <Save className="h-4 w-4 mr-2" />
+            {isPending ? "Saving..." : "Save Package"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.back()}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
     </form>
   )
 }

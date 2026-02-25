@@ -2,11 +2,24 @@ export const runtime = "nodejs"
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireMerchant } from "@/lib/auth"
+import { assertFeature, FeatureDeniedError } from "@/lib/features"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 import { prisma } from "@/lib/prisma"
 
 export async function POST(request: NextRequest) {
   try {
     const merchant = await requireMerchant()
+    try {
+      await assertFeature(merchant.id, GROWTH_FEATURE_KEYS.G_CUSTOM_DOMAIN, "/api/domains/disconnect")
+    } catch (e) {
+      if (e instanceof FeatureDeniedError) {
+        return NextResponse.json(
+          { error: "Custom domain is not available on your plan", upgradeRequired: true },
+          { status: 403 }
+        )
+      }
+      throw e
+    }
 
     if (!merchant.customDomain) {
       return NextResponse.json(
@@ -18,37 +31,21 @@ export async function POST(request: NextRequest) {
     const domain = merchant.customDomain
 
     // Clear domain configuration and update domain claims
-    const updated = await prisma.$transaction(async (tx) => {
-      // Update merchant
-      const updatedMerchant = await tx.merchant.update({
-        where: { id: merchant.id },
-        data: {
-          customDomain: null,
-          domainStatus: "PENDING",
-          domainVerificationToken: null,
-          domainVerifiedAt: null,
-        },
-        select: {
-          id: true,
-          customDomain: true,
-          domainStatus: true,
-          domainVerificationToken: true,
-          domainVerifiedAt: true,
-        },
-      })
-
-      // Mark domain claims as released
-      await tx.domainClaim.updateMany({
-        where: {
-          domain: domain,
-          merchantId: merchant.id,
-        },
-        data: {
-          releasedAt: new Date(),
-        },
-      })
-
-      return updatedMerchant
+    const updated = await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        customDomain: null,
+        domainStatus: "PENDING",
+        domainVerificationToken: null,
+        domainVerifiedAt: null,
+      },
+      select: {
+        id: true,
+        customDomain: true,
+        domainStatus: true,
+        domainVerificationToken: true,
+        domainVerifiedAt: true,
+      },
     })
 
     return NextResponse.json({

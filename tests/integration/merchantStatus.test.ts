@@ -83,16 +83,15 @@ describe("Merchant Status Transitions", () => {
     expect(result.success).toBe(true)
 
     // Check history was created
-    const history = await prisma.merchantStatusHistory.findFirst({
+    const history = await prisma.merchantStatusEvent.findFirst({
       where: { merchantId: testMerchantId },
       orderBy: { createdAt: "desc" },
     })
 
     expect(history).toBeDefined()
-    expect(history?.fromAccountStatus).toBe("ACTIVE")
-    expect(history?.toAccountStatus).toBe("ON_HOLD")
-    expect(history?.reason).toBe("MANUAL_REVIEW")
-    expect(history?.changedByAdminUserId).toBe("admin-user-id")
+    expect(history?.eventType).toBe("HOLD_APPLIED")
+    expect(history?.reasonCode).toBe("MANUAL_REVIEW")
+    expect(history?.createdByUserId).toBe("admin-user-id")
   })
 
   it("should send on-hold email when status changes to ON_HOLD", async () => {

@@ -5,16 +5,14 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { Edit2, Trash2, Copy, CheckCircle2, XCircle } from "lucide-react"
+import { Edit2, Trash2, Copy } from "lucide-react"
 import Link from "next/link"
 import { deleteCoupon } from "@/app/actions/coupons"
-import { CouponType } from "@prisma/client"
-import { formatCurrency } from "@/lib/utils/currency"
 
 interface Coupon {
   id: string
   code: string
-  type: CouponType
+  type: "PERCENT" | "FIXED"
   value: any // Decimal
   minOrderAmount: any | null
   maxDiscount: any | null
@@ -45,14 +43,12 @@ export function CouponsList({ initialCoupons }: CouponsListProps) {
 
     startTransition(async () => {
       try {
-        const result = await deleteCoupon(couponId)
-        if (result.success) {
-          setCoupons((prev) => prev.filter((c) => c.id !== couponId))
-          toast({
-            title: "Coupon disabled",
-            description: "The coupon has been disabled successfully.",
-          })
-        }
+        await deleteCoupon(couponId)
+        setCoupons((prev) => prev.filter((c) => c.id !== couponId))
+        toast({
+          title: "Coupon disabled",
+          description: "The coupon has been disabled successfully.",
+        })
       } catch (error: any) {
         toast({
           title: "Error",

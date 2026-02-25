@@ -162,31 +162,17 @@ export async function createOrder(input: unknown) {
       return { success: false, error: "Failed to generate order number. Please try again." }
     }
 
-    // Validate and apply coupon if provided
+    // Validate and apply coupon if provided.
+    // In this deployment, coupon tables are not provisioned; reject orders that try to use coupons.
     let discountInInr = 0
     let couponId: string | null = null
     let couponCode: string | null = null
 
     if (validatedInput.couponCode) {
-      const couponValidation = await validateCoupon(
-        merchant.id,
-        validatedInput.couponCode,
-        totalAmountInPaise,
-        customerEmail
-      )
-
-      if (!couponValidation.isValid || !couponValidation.coupon) {
-        return {
-          success: false,
-          error: couponValidation.error || "Invalid coupon code",
-        }
+      return {
+        success: false,
+        error: "Coupons not available: database not provisioned",
       }
-
-      // Calculate discount
-      const discountCalc = calculateDiscount(couponValidation.coupon, totalAmountInPaise)
-      discountInInr = discountCalc.discountAmount
-      couponId = couponValidation.coupon.id
-      couponCode = couponValidation.coupon.code
     }
 
     // Calculate platform fee on PRE-DISCOUNT amount (grossAmount)
@@ -250,17 +236,6 @@ export async function createOrder(input: unknown) {
               amount: new Decimal(netPayableInInr), // Payment amount is after discount
             },
           },
-          ...(couponId && {
-            couponRedemption: {
-              create: {
-                couponId,
-                merchantId: merchant.id,
-                customerEmail: customerEmail || null,
-                customerPhone: validatedInput.customerPhone || null,
-                discountAmount: new Decimal(discountInInr),
-              },
-            },
-          }),
         },
         include: {
           items: {
@@ -309,10 +284,11 @@ export async function createOrder(input: unknown) {
 
       // Add discount ledger entry if coupon was applied
       if (discountInInr > 0 && couponCode) {
+        // Map coupon discount to a negative PLATFORM_FEE entry so we don't rely on a custom enum.
         ledgerEntries.push({
           merchantId: merchant.id,
           orderId: newOrder.id,
-          type: LedgerType.COUPON_DISCOUNT,
+          type: LedgerType.PLATFORM_FEE,
           amount: new Decimal(discountInInr * -1), // Negative (debit)
           description: `Coupon discount (${couponCode}) for ${orderNumber}`,
           status: "PENDING" as const,

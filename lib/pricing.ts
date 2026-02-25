@@ -166,6 +166,7 @@ async function getDefaultPackageId(): Promise<string | null> {
     starterPackage = await prisma.pricingPackage.create({
       data: {
         name: "Starter",
+        code: "starter",
         description: "Default starter plan",
         status: "PUBLISHED",
         fixedFeePaise: 1000, // ₹10

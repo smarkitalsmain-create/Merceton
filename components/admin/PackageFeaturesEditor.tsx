@@ -22,6 +22,7 @@ interface Feature {
   key: string
   name: string
   description: string | null
+  category?: string
   valueType: "BOOLEAN" | "NUMBER" | "STRING" | "JSON"
   enabled: boolean
   valueJson: any
@@ -133,28 +134,14 @@ export function PackageFeaturesEditor({
     )
   }
 
-  // Group features by category (Starter vs Growth)
-  const starterFeatures = features.filter((f) =>
-    [
-      "STOREFRONT_SUBDOMAIN",
-      "BASIC_THEME",
-      "LOGO_BANNER_UPLOAD",
-      "PRODUCT_LIMIT",
-      "ORDERS_DASHBOARD",
-      "ORDER_STATUS_UPDATE",
-      "BASIC_CUSTOMER_DETAILS",
-      "PAYMENTS_RAZORPAY",
-      "PAYMENT_TRACKING",
-      "PLATFORM_FEE_DEDUCTION",
-      "ANALYTICS_BASIC",
-      "PAYOUTS_WEEKLY",
-      "LEDGER_SUMMARY_VIEW",
-    ].includes(f.key)
-  )
-
-  const growthFeatures = features.filter(
-    (f) => !starterFeatures.includes(f)
-  )
+  // All features are Growth-only (9). Group by category.
+  const byCategory = features.reduce<Record<string, typeof features>>((acc, f) => {
+    const cat = f.category ?? "other"
+    if (!acc[cat]) acc[cat] = []
+    acc[cat].push(f)
+    return acc
+  }, {})
+  const categories = Object.keys(byCategory).sort()
 
   return (
     <Card>
@@ -176,37 +163,22 @@ export function PackageFeaturesEditor({
           </div>
         )}
 
-        {/* Starter Features */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-muted-foreground">
-            STARTER PLAN FEATURES
-          </h3>
-          {starterFeatures.map((feature) => (
-            <FeatureRow
-              key={feature.id}
-              feature={feature}
-              disabled={!isDraft}
-              onToggle={handleFeatureToggle}
-              onValueChange={handleFeatureValueChange}
-            />
-          ))}
-        </div>
-
-        {/* Growth Features */}
-        <div className="space-y-4 border-t pt-6">
-          <h3 className="text-sm font-semibold text-muted-foreground">
-            GROWTH PLAN FEATURES
-          </h3>
-          {growthFeatures.map((feature) => (
-            <FeatureRow
-              key={feature.id}
-              feature={feature}
-              disabled={!isDraft}
-              onToggle={handleFeatureToggle}
-              onValueChange={handleFeatureValueChange}
-            />
-          ))}
-        </div>
+        {categories.map((cat) => (
+          <div key={cat} className="space-y-4 border-t pt-6 first:border-t-0 first:pt-0">
+            <h3 className="text-sm font-semibold text-muted-foreground capitalize">
+              {cat}
+            </h3>
+            {byCategory[cat].map((feature) => (
+              <FeatureRow
+                key={feature.id}
+                feature={feature}
+                disabled={!isDraft}
+                onToggle={handleFeatureToggle}
+                onValueChange={handleFeatureValueChange}
+              />
+            ))}
+          </div>
+        ))}
 
         {isDraft && (
           <>
@@ -299,11 +271,6 @@ function FeatureRow({
           </div>
         )}
 
-        {isProductLimit && hasUnlimited && (
-          <p className="text-xs text-amber-600 mt-1">
-            Note: UNLIMITED_PRODUCTS is enabled, so this limit will be ignored.
-          </p>
-        )}
       </div>
 
       <Switch

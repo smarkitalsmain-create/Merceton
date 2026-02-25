@@ -3,11 +3,15 @@ export const runtime = "nodejs" // Required for DNS lookups
 import { NextRequest, NextResponse } from "next/server"
 import { requireMerchant } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { assertFeature, FeatureDeniedError, featureDeniedResponse } from "@/lib/features"
+import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
 import { resolveTxt } from "node:dns/promises"
 
 export async function POST(request: NextRequest) {
   try {
     const merchant = await requireMerchant()
+
+    await assertFeature(merchant.id, GROWTH_FEATURE_KEYS.G_CUSTOM_DOMAIN, "/api/domain/verify")
 
     if (!merchant.customDomain || !merchant.domainVerificationToken) {
       return NextResponse.json(
@@ -81,6 +85,9 @@ export async function POST(request: NextRequest) {
       message,
     })
   } catch (error) {
+    if (error instanceof FeatureDeniedError) {
+      return featureDeniedResponse(error)
+    }
     console.error("Verify domain error:", error)
     if (error instanceof Error) {
       return NextResponse.json(

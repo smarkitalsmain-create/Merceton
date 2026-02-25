@@ -126,7 +126,7 @@ export default function AdminBillingPage() {
         from,
         to,
       })
-      const url = `/api/billing/invoice.pdf?${params}`
+      const url = `/api/admin/billing/invoice.pdf?${params}`
       const response = await fetch(url)
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: "Failed to download invoice" }))

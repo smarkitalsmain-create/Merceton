@@ -1,24 +1,14 @@
 /**
  * Coupon Validation and Calculation
- * 
- * Handles coupon validation rules and discount calculation.
+ *
+ * In this deployment, coupon tables are not provisioned in the database.
+ * These helpers provide safe fallbacks so the app can compile and run.
  */
-
-import { prisma } from "@/lib/prisma"
-import { CouponType } from "@prisma/client"
-import { Decimal } from "@prisma/client/runtime/library"
 
 export interface CouponValidationResult {
   isValid: boolean
   error?: string
-  coupon?: {
-    id: string
-    code: string
-    type: CouponType
-    value: Decimal
-    minOrderAmount: Decimal | null
-    maxDiscount: Decimal | null
-  }
+  coupon?: any
 }
 
 export interface DiscountCalculation {
@@ -27,7 +17,8 @@ export interface DiscountCalculation {
 }
 
 /**
- * Validate a coupon code for a merchant and order amount
+ * Validate a coupon code for a merchant and order amount.
+ * Since coupons are not available, always returns an error result.
  */
 export async function validateCoupon(
   merchantId: string,
@@ -35,102 +26,28 @@ export async function validateCoupon(
   orderAmountInPaise: number,
   customerEmail?: string
 ): Promise<CouponValidationResult> {
-  // Normalize code (uppercase, trim)
-  const normalizedCode = code.trim().toUpperCase()
-
-  // Find coupon
-  const coupon = await prisma.coupon.findUnique({
-    where: {
-      merchantId_code: {
-        merchantId,
-        code: normalizedCode,
-      },
-    },
-  })
-
-  if (!coupon) {
-    return {
-      isValid: false,
-      error: "Invalid coupon code",
-    }
-  }
-
-  // Check if coupon is active
-  if (!coupon.isActive) {
-    return {
-      isValid: false,
-      error: "This coupon is no longer active",
-    }
-  }
-
-  // Check validity dates
-  const now = new Date()
-  if (coupon.validFrom > now) {
-    return {
-      isValid: false,
-      error: "This coupon is not yet valid",
-    }
-  }
-
-  if (coupon.validUntil && coupon.validUntil < now) {
-    return {
-      isValid: false,
-      error: "This coupon has expired",
-    }
-  }
-
-  // Check minimum order amount
-  const orderAmountInInr = orderAmountInPaise / 100
-  if (coupon.minOrderAmount) {
-    const minAmount = Number(coupon.minOrderAmount)
-    if (orderAmountInInr < minAmount) {
-      return {
-        isValid: false,
-        error: `Minimum order amount of ₹${minAmount.toFixed(2)} required for this coupon`,
-      }
-    }
-  }
-
-  // Check usage limit
-  if (coupon.usageLimit !== null) {
-    const redemptionCount = await prisma.couponRedemption.count({
-      where: { couponId: coupon.id },
-    })
-
-    if (redemptionCount >= coupon.usageLimit) {
-      return {
-        isValid: false,
-        error: "This coupon has reached its usage limit",
-      }
-    }
-  }
-
   return {
-    isValid: true,
-    coupon: {
-      id: coupon.id,
-      code: coupon.code,
-      type: coupon.type,
-      value: coupon.value,
-      minOrderAmount: coupon.minOrderAmount,
-      maxDiscount: coupon.maxDiscount,
-    },
+    isValid: false,
+    error: "Coupons not available: database not provisioned",
   }
 }
 
+type CouponTypeLocal = "PERCENT" | "FIXED"
+
 /**
- * Calculate discount amount for a coupon
+ * Calculate discount amount for a coupon.
+ * Purely numeric helper; does not depend on Prisma types.
  */
 export function calculateDiscount(
   coupon: {
-    type: CouponType
-    value: Decimal
-    maxDiscount: Decimal | null
+    type: CouponTypeLocal
+    value: number
+    maxDiscount: number | null
   },
   orderAmountInPaise: number
 ): DiscountCalculation {
   const orderAmountInInr = orderAmountInPaise / 100
-  const couponValue = Number(coupon.value)
+  const couponValue = coupon.value
   let discountAmount = 0
 
   if (coupon.type === "PERCENT") {
@@ -138,8 +55,8 @@ export function calculateDiscount(
     discountAmount = (orderAmountInInr * couponValue) / 100
 
     // Apply maximum discount cap if set
-    if (coupon.maxDiscount) {
-      const maxDiscount = Number(coupon.maxDiscount)
+    if (coupon.maxDiscount != null) {
+      const maxDiscount = coupon.maxDiscount
       discountAmount = Math.min(discountAmount, maxDiscount)
     }
   } else {
@@ -162,17 +79,9 @@ export function calculateDiscount(
 }
 
 /**
- * Get coupon by code (for display purposes)
+ * Get coupon by code (for display purposes).
+ * Returns null because coupons are not provisioned.
  */
 export async function getCouponByCode(merchantId: string, code: string) {
-  const normalizedCode = code.trim().toUpperCase()
-
-  return prisma.coupon.findUnique({
-    where: {
-      merchantId_code: {
-        merchantId,
-        code: normalizedCode,
-      },
-    },
-  })
+  return null
 }

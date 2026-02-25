@@ -2,6 +2,7 @@
 
 import { requireSuperAdmin, requireAdmin, getAdminIdentity } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
+import { GROWTH_FEATURE_KEYS_LIST } from "@/lib/features/featureKeys"
 import { revalidatePath } from "next/cache"
 import { auditReasonSchema } from "@/lib/validations/pricing"
 import { logAdminAction } from "@/lib/admin/audit"
@@ -87,9 +88,10 @@ export async function updatePricingPackageFeatures(
 export async function getPackageFeatures(packageId: string) {
   await requireSuperAdmin()
 
-  const features = await prisma.feature.findMany({
-    orderBy: { key: "asc" },
+  const allFeatures = await prisma.feature.findMany({
+    orderBy: [{ category: "asc" }, { key: "asc" }],
   })
+  const features = allFeatures.filter((f) => GROWTH_FEATURE_KEYS_LIST.includes(f.key as any))
 
   const packageFeatures = await prisma.pricingPackageFeature.findMany({
     where: { pricingPackageId: packageId },
@@ -109,6 +111,7 @@ export async function getPackageFeatures(packageId: string) {
       key: feature.key,
       name: feature.name,
       description: feature.description,
+      category: feature.category ?? "other",
       valueType: feature.valueType,
       enabled: packageFeature?.enabled ?? false,
       valueJson: packageFeature?.valueJson ?? null,
@@ -159,6 +162,7 @@ export async function getMerchantResolvedFeatures(merchantId: string) {
   return allFeatures.map((feature) => {
     const resolved = features.get(feature.key as any)
     return {
+      featureId: feature.id,
       key: feature.key,
       name: feature.name,
       description: feature.description,

@@ -14,7 +14,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Save } from "lucide-react"
 import { createCoupon, updateCoupon } from "@/app/actions/coupons"
-import { CouponType } from "@prisma/client"
 
 const couponSchema = z.object({
   code: z
@@ -34,11 +33,13 @@ const couponSchema = z.object({
 
 type CouponFormData = z.infer<typeof couponSchema>
 
+type CouponTypeLocal = "PERCENT" | "FIXED"
+
 interface CouponFormProps {
   initialData?: {
     id: string
     code: string
-    type: CouponType
+    type: CouponTypeLocal
     value: number
     minOrderAmount: number | null
     maxDiscount: number | null
@@ -95,26 +96,22 @@ export function CouponForm({ initialData }: CouponFormProps) {
         }
 
         if (initialData) {
-          const result = await updateCoupon({
+          await updateCoupon({
             id: initialData.id,
             ...payload,
           })
-          if (result.success) {
-            toast({
-              title: "Coupon updated",
-              description: "Coupon has been updated successfully.",
-            })
-            router.push("/dashboard/marketing/coupons")
-          }
+          toast({
+            title: "Coupon updated",
+            description: "Coupon has been updated successfully.",
+          })
+          router.push("/dashboard/marketing/coupons")
         } else {
-          const result = await createCoupon(payload)
-          if (result.success) {
-            toast({
-              title: "Coupon created",
-              description: "Coupon has been created successfully.",
-            })
-            router.push("/dashboard/marketing/coupons")
-          }
+          await createCoupon(payload)
+          toast({
+            title: "Coupon created",
+            description: "Coupon has been created successfully.",
+          })
+          router.push("/dashboard/marketing/coupons")
         }
       } catch (error: any) {
         toast({

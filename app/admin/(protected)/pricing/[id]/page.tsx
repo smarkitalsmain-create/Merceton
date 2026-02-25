@@ -59,12 +59,20 @@ export default async function PricingPackageDetailPage({
         </div>
         <div className="flex gap-2">
           {packageData.status === "DRAFT" && (
-            <Button asChild>
-              <Link href={`/admin/pricing/${packageData.id}/edit`}>
-                <Edit2 className="h-4 w-4 mr-2" />
-                Edit
-              </Link>
-            </Button>
+            <>
+              <Button asChild>
+                <Link href={`/admin/pricing/${packageData.id}/edit`}>
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Edit fees
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href={`/admin/pricing-packages/${packageData.id}/edit`}>
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Edit features
+                </Link>
+              </Button>
+            </>
           )}
           <PricingPackageActions
             packageData={packageData}

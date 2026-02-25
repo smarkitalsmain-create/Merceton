@@ -6,8 +6,8 @@ import Link from "next/link"
 import { Plus } from "lucide-react"
 
 export default async function SupportPage() {
-  await requireMerchant()
-
+  const merchant = await requireMerchant()
+  // Support tickets = Starter baseline (no gating)
   const tickets = await getMerchantTickets()
 
   return (

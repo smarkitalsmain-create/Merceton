@@ -3,7 +3,9 @@ export const runtime = "nodejs"
 import { requireSuperAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
+import { getMerchantResolvedFeatures } from "@/app/actions/features"
 import { MerchantPricingAdminForm } from "@/components/admin/MerchantPricingAdminForm"
+import { MerchantFeatureOverrideEditor } from "@/components/admin/MerchantFeatureOverrideEditor"
 
 export default async function MerchantPricingAdminPage({
   params,
@@ -27,15 +29,18 @@ export default async function MerchantPricingAdminPage({
     notFound()
   }
 
-  const packages = await prisma.pricingPackage.findMany({
-    where: {
-      deletedAt: null,
-      isActive: true,
-    },
-    orderBy: {
-      name: "asc",
-    },
-  })
+  const [packages, resolvedFeatures] = await Promise.all([
+    prisma.pricingPackage.findMany({
+      where: {
+        deletedAt: null,
+        isActive: true,
+      },
+      orderBy: {
+        name: "asc",
+      },
+    }),
+    getMerchantResolvedFeatures(merchant.id),
+  ])
 
   return (
     <div className="space-y-6">
@@ -48,6 +53,11 @@ export default async function MerchantPricingAdminPage({
         merchant={merchant}
         feeConfig={merchant.feeConfig}
         packages={packages}
+      />
+
+      <MerchantFeatureOverrideEditor
+        merchantId={merchant.id}
+        resolvedFeatures={resolvedFeatures}
       />
     </div>
   )

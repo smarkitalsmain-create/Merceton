@@ -121,5 +121,57 @@ test.describe("Download Flows", () => {
         test.skip(true, "No merchants found to test ledger download")
       }
     })
+
+    test("admin can download platform invoice PDF for a merchant", async ({ page }) => {
+      await adminLogin(page)
+
+      // Go to platform invoices or first merchant billing
+      await page.goto("/admin/platform-invoices", { waitUntil: "domcontentloaded" }).catch(() =>
+        page.goto("/_admin/platform-invoices", { waitUntil: "domcontentloaded" })
+      ).catch(() =>
+        page.goto("/admin/merchants", { waitUntil: "domcontentloaded" })
+      )
+
+      const invoicesPage = page.url().includes("platform-invoices")
+      if (invoicesPage) {
+        // On platform invoices: select merchant + dates and click Download Invoice (PDF)
+        await page.waitForSelector('select, [role="combobox"]', { timeout: 5000 }).catch(() => {})
+        const merchantSelect = page.locator('select, [role="combobox"]').first()
+        if (await merchantSelect.count() > 0) {
+          await merchantSelect.click()
+          await page.locator('[role="option"]').first().click().catch(() => {})
+        }
+        const fromInput = page.locator('input[name="from"], input[placeholder*="From"]').first()
+        const toInput = page.locator('input[name="to"], input[placeholder*="To"]').first()
+        if (await fromInput.count() > 0) await fromInput.fill("2025-01-01")
+        if (await toInput.count() > 0) await toInput.fill("2025-01-31")
+        const downloadBtn = page.locator('button:has-text("Download Invoice"), a:has-text("Download Invoice")').first()
+        if (await downloadBtn.count() > 0) {
+          const downloadPromise = page.waitForEvent("download", { timeout: 15_000 })
+          await downloadBtn.click()
+          const download = await downloadPromise
+          expect(download.suggestedFilename()).toMatch(/\.pdf$/i)
+        }
+      } else {
+        // Merchant list: open first merchant billing and trigger invoice download
+        const firstMerchantLink = page.locator('a[href*="/merchants/"]').first()
+        if (await firstMerchantLink.count() > 0) {
+          await firstMerchantLink.click()
+          await page.waitForLoadState("networkidle", { timeout: 10_000 })
+          const billingLink = page.locator('a[href*="billing"]').first()
+          if (await billingLink.count() > 0) {
+            await billingLink.click()
+            await page.waitForLoadState("networkidle", { timeout: 10_000 })
+          }
+          const downloadBtn = page.locator('button:has-text("Download Invoice"), a:has-text("Invoice")').first()
+          if (await downloadBtn.count() > 0) {
+            const downloadPromise = page.waitForEvent("download", { timeout: 15_000 })
+            await downloadBtn.click()
+            const download = await downloadPromise
+            expect(download.suggestedFilename()).toMatch(/\.pdf$/i)
+          }
+        }
+      }
+    })
   })
 })

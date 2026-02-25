@@ -4,9 +4,15 @@
  * High-level helpers for checking and asserting feature access.
  */
 
+import { NextResponse } from "next/server"
 import { resolveMerchantFeatures } from "./resolver"
 import { FeatureKey, FeatureDeniedError } from "./types"
 import { prisma } from "@/lib/prisma"
+
+/** Returns 403 JSON with error, featureKey, upgradeRequired for gated API routes */
+export function featureDeniedResponse(e: FeatureDeniedError): NextResponse {
+  return NextResponse.json(e.toJSON(), { status: 403 })
+}
 
 /**
  * Check if merchant can use a feature
@@ -87,9 +93,14 @@ export async function assertFeature(
 }
 
 /**
- * Get product limit for merchant (handles UNLIMITED_PRODUCTS)
+ * Product limit: null = unlimited, number = cap (Starter default 100).
  */
-export async function getProductLimit(merchantId: string): Promise<number> {
-  const limit = await getFeatureValue<number>(merchantId, "PRODUCT_LIMIT", 100)
-  return limit ?? 100
+export async function getProductLimit(merchantId: string): Promise<number | null> {
+  const { GROWTH_FEATURE_KEYS } = await import("./featureKeys")
+  const features = await resolveMerchantFeatures(merchantId)
+  if (features.get(GROWTH_FEATURE_KEYS.G_UNLIMITED_PRODUCTS)?.enabled) return null
+  return 100
 }
+
+/** Throws FeatureDeniedError (return 403 JSON in route). Alias for assertFeature. */
+export const requireFeature = assertFeature

@@ -11,6 +11,8 @@ import { MerchantPricingTab } from "@/components/admin/MerchantPricingTab"
 import { MerchantAuditTab } from "@/components/admin/MerchantAuditTab"
 import { MerchantOnboardingTab } from "@/components/admin/MerchantOnboardingTab"
 import { MerchantStatusEditor } from "@/components/admin/MerchantStatusEditor"
+import { MerchantFeatureOverrideEditor } from "@/components/admin/MerchantFeatureOverrideEditor"
+import { getMerchantResolvedFeatures } from "@/app/actions/features"
 
 export default async function MerchantDetailPage({
   params,
@@ -65,8 +67,8 @@ export default async function MerchantDetailPage({
     notFound()
   }
 
-  // Get effective pricing config, assignable packages, recent orders, and GMV
-  const [effectiveConfig, packages, recentOrders, gmvResult] = await Promise.all([
+  // Get effective pricing config, assignable packages, recent orders, GMV, and resolved features
+  const [effectiveConfig, packages, recentOrders, gmvResult, resolvedFeatures] = await Promise.all([
     getEffectiveFeeConfig(merchant.id),
     prisma.pricingPackage.findMany({
       where: {
@@ -101,6 +103,7 @@ export default async function MerchantDetailPage({
       where: { merchantId: merchant.id },
       _sum: { grossAmount: true },
     }),
+    getMerchantResolvedFeatures(merchant.id),
   ])
   const gmv = gmvResult._sum.grossAmount?.toNumber() || 0
 
@@ -173,6 +176,13 @@ export default async function MerchantDetailPage({
               packageName: effectiveConfig.packageName,
             }}
             packages={packages}
+          />
+        </TabsContent>
+
+        <TabsContent value="features">
+          <MerchantFeatureOverrideEditor
+            merchantId={merchant.id}
+            resolvedFeatures={resolvedFeatures}
           />
         </TabsContent>
 

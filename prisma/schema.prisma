@@ -1,6 +1,3 @@
-// Multi-tenant Ecommerce SaaS Schema
-// Every record is scoped to merchantId for data isolation
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,66 +8,46 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ============================================================================
-// TENANT & USER MANAGEMENT
-// ============================================================================
-
 model Merchant {
-  id          String   @id @default(cuid())
-  slug        String   @unique
-  displayName String
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Account status and hold management
-  accountStatus MerchantAccountStatus @default(ACTIVE)
-  holdReasonCode String?
-  holdReasonText String?
-  holdAppliedAt  DateTime?
-  holdReleasedAt DateTime?
-  holdAppliedByUserId String?
-  holdReleasedByUserId String?
-
-  // KYC status and approval
-  kycStatus        MerchantKycStatus @default(PENDING)
-  kycApprovedAt    DateTime?
-  kycApprovedByUserId String?
-
-  // Custom domain configuration
-  // NOTE: do NOT keep @unique here for production-grade behavior.
+  id                      String                    @id @default(cuid())
+  slug                    String                    @unique
+  displayName             String
+  isActive                Boolean                   @default(true)
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  accountStatus           MerchantAccountStatus     @default(ACTIVE)
+  holdReasonCode          String?
+  holdReasonText          String?
+  holdAppliedAt           DateTime?
+  holdReleasedAt          DateTime?
+  holdAppliedByUserId     String?
+  holdReleasedByUserId    String?
+  kycStatus               MerchantKycStatus         @default(PENDING)
+  kycApprovedAt           DateTime?
+  kycApprovedByUserId     String?
   customDomain            String?
-  domainStatus            DomainStatus @default(PENDING)
+  domainStatus            DomainStatus              @default(PENDING)
   domainVerificationToken String?
   domainVerifiedAt        DateTime?
-
-  // Platform fee configuration
-  feePercentageBps Int?
-  feeFlatPaise     Int?
-  feeMaxCapPaise   Int?
-
-  // Relations
-  users         User[]
-  storefront    StorefrontSettings?
-  pages         StorefrontPage[]
-  products      Product[]
-  orders        Order[]
-  payments      Payment[]
-  ledgerEntries LedgerEntry[]
-  payoutBatches PayoutBatch[]
-  feeConfig     MerchantFeeConfig?
-  onboarding    MerchantOnboarding?
-  statusEvents  MerchantStatusEvent[]
-  statusHistory MerchantStatusHistory[]
-  platformInvoices PlatformInvoice[]
-  storeSettings MerchantStoreSettings?
-  bankAccount MerchantBankAccount?
-  featureOverrides MerchantFeatureOverride[]
-  onboardingValidationLogs OnboardingValidationLog[]
-  domainClaims DomainClaim[]
-  coupons Coupon[]
-  couponRedemptions CouponRedemption[]
-  tickets Ticket[]
+  feePercentageBps        Int?
+  feeFlatPaise            Int?
+  feeMaxCapPaise          Int?
+  ledgerEntries           LedgerEntry[]
+  bankAccount             MerchantBankAccount?
+  featureOverrides        MerchantFeatureOverride[]
+  feeConfig               MerchantFeeConfig?
+  onboarding              MerchantOnboarding?
+  statusEvents            MerchantStatusEvent[]
+  storeSettings           MerchantStoreSettings?
+  orders                  Order[]
+  payments                Payment[]
+  payoutBatches           PayoutBatch[]
+  platformInvoices        PlatformInvoice[]
+  products                Product[]
+  pages                   StorefrontPage[]
+  storefront              StorefrontSettings?
+  tickets                 Ticket[]
+  users                   User[]
 
   @@index([slug])
   @@index([isActive])
@@ -78,167 +55,82 @@ model Merchant {
   @@index([kycStatus])
   @@index([customDomain])
   @@index([customDomain, domainStatus])
-  @@unique([customDomain])
-
   @@map("merchants")
 }
 
-// ============================================================================
-// DOMAIN CLAIM HISTORY (for audit and collision prevention)
-// ============================================================================
-
-model DomainClaim {
-  id          String       @id @default(cuid())
-  domain      String       // Normalized domain
-  merchantId  String
-  status      DomainStatus @default(PENDING)
-  token       String?      // Verification token
-  verifiedAt  DateTime?
-  releasedAt  DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  @@index([domain])
-  @@index([merchantId])
-  @@index([domain, status])
-  @@index([createdAt])
-  @@map("domain_claims")
-}
-
 model User {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   merchantId String?
-  authUserId String   @unique
+  authUserId String    @unique
   email      String
   name       String?
-  role       UserRole @default(ADMIN)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  merchant Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  role       UserRole  @default(ADMIN)
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  merchant   Merchant? @relation(fields: [merchantId], references: [id])
 
   @@index([merchantId])
   @@index([authUserId])
   @@map("users")
 }
 
-enum UserRole {
-  ADMIN
-  STAFF
-}
-
-enum DomainStatus {
-  PENDING
-  VERIFIED
-  ACTIVE
-  FAILED
-}
-
-enum MerchantAccountStatus {
-  ACTIVE
-  ON_HOLD
-}
-
-enum MerchantKycStatus {
-  PENDING
-  SUBMITTED
-  APPROVED
-  REJECTED
-}
-
-// ============================================================================
-// STOREFRONT
-// ============================================================================
-
 model StorefrontSettings {
-  id         String   @id @default(cuid())
-  merchantId String   @unique
-
+  id          String         @id @default(cuid())
+  merchantId  String         @unique
   mode        StorefrontMode @default(THEME)
-
-  // Theme-based storefront
-  theme       String? @default("minimal")
+  theme       String?        @default("minimal")
   themeConfig Json?
-
-  // Custom code storefront
-  customHtml  String? @db.Text
-  customCss   String? @db.Text
-  customJs    String? @db.Text
-
-  // Builder storefront (GrapesJS / future editor)
+  customHtml  String?
+  customCss   String?
+  customJs    String?
   builderJson Json?
-  builderHtml String? @db.Text
-  builderCss  String? @db.Text
-
-  // Common
+  builderHtml String?
+  builderCss  String?
   logoUrl     String?
   publishedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  merchant    Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
   @@map("storefront_settings")
 }
 
-enum StorefrontMode {
-  THEME
-  BUILDER
-  CUSTOM_CODE
-}
-
-// ============================================================================
-// STOREFRONT PAGES (SECTION-BASED BUILDER)
-// ============================================================================
-
 model StorefrontPage {
-  id         String   @id @default(cuid())
-  merchantId String
-  slug       String   @default("home")
-  title      String
-  layoutJson Json
-  isPublished Boolean  @default(true)
+  id          String    @id @default(cuid())
+  merchantId  String
+  slug        String    @default("home")
+  title       String
+  layoutJson  Json
+  isPublished Boolean   @default(true)
   publishedAt DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  merchant    Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
   @@unique([merchantId, slug])
   @@index([merchantId])
   @@map("storefront_pages")
 }
 
-// ============================================================================
-// CATALOG
-// ============================================================================
-
 model Product {
-  id          String   @id @default(cuid())
+  id          String         @id @default(cuid())
   merchantId  String
   name        String
   description String?
   price       Int
   mrp         Int?
   sku         String?
-  stock       Int      @default(0)
-  isActive    Boolean  @default(true)
-  
-  // GST & HSN fields (required if merchant is GST registered)
+  stock       Int            @default(0)
+  isActive    Boolean        @default(true)
   hsnOrSac    String?
-  gstRate     Int?     // GST rate as percentage (0, 5, 12, 18, 28)
-  isTaxable   Boolean  @default(true)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  merchant   Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  images     ProductImage[]
-  orderItems OrderItem[]
+  gstRate     Int?
+  isTaxable   Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  orderItems  OrderItem[]
+  images      ProductImage[]
+  merchant    Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
   @@index([merchantId])
   @@index([merchantId, isActive])
@@ -254,71 +146,677 @@ model ProductImage {
   alt       String?
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@index([productId, sortOrder])
   @@map("product_images")
 }
 
-// ============================================================================
-// ORDERS
-// ============================================================================
-
 model Order {
-  id              String      @id @default(cuid())
-  merchantId      String
-  orderNumber     String
-  customerName    String
-  customerEmail   String
-  customerPhone   String?
-  customerAddress String
-
+  id               String           @id @default(cuid())
+  merchantId       String
+  orderNumber      String
+  customerName     String
+  customerEmail    String
+  customerPhone    String?
+  customerAddress  String
   /// Shipping and lifecycle
   shippingAddress  Json?
-  stage            OrderStage      @default(NEW)
-  status           OrderStatus     @default(PENDING)
-  paymentStatus    PaymentStatus   @default(PENDING)
+  stage            OrderStage       @default(NEW)
+  status           OrderStatus      @default(PENDING)
+  paymentStatus    PaymentStatus    @default(PENDING)
   settlementStatus SettlementStatus @default(NOT_ELIGIBLE)
-
   /// Amount breakdown (INR)
-  subtotal    Decimal @db.Decimal(10, 2) @default(0)
-  tax         Decimal @db.Decimal(10, 2) @default(0)
-  shippingFee Decimal @db.Decimal(10, 2) @default(0)
-  discount    Decimal @db.Decimal(10, 2) @default(0)
-  totalAmount Decimal @db.Decimal(10, 2) @default(0)
-
+  subtotal         Decimal          @default(0) @db.Decimal(10, 2)
+  tax              Decimal          @default(0) @db.Decimal(10, 2)
+  shippingFee      Decimal          @default(0) @db.Decimal(10, 2)
+  discount         Decimal          @default(0) @db.Decimal(10, 2)
+  totalAmount      Decimal          @default(0) @db.Decimal(10, 2)
   /// Legacy/platform fee fields (used by existing flows)
-  grossAmount Decimal @db.Decimal(10, 2)
-  platformFee Decimal @db.Decimal(10, 2)
-  netPayable  Decimal @db.Decimal(10, 2)
-
+  grossAmount      Decimal          @db.Decimal(10, 2)
+  platformFee      Decimal          @db.Decimal(10, 2)
+  netPayable       Decimal          @db.Decimal(10, 2)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  invoiceIssuedAt  DateTime?
   /// Invoice fields (customer-facing invoices per order)
-  invoiceNumber String?  // Unique invoice number (e.g., "MRC-2024-00001")
-  invoiceIssuedAt DateTime? // When invoice was issued
-  invoiceType InvoiceType? // TAX_INVOICE or BILL_OF_SUPPLY
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  merchant      Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  items         OrderItem[]
-  payment       Payment?
-  ledgerEntries LedgerEntry[]
-  shipments     Shipment[]
-  refunds       Refund[]
-  events        OrderEvent[]
-  couponRedemption CouponRedemption?
+  invoiceNumber    String?
+  invoiceType      InvoiceType?
+  ledgerEntries    LedgerEntry[]
+  events           OrderEvent[]
+  items            OrderItem[]
+  merchant         Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  payment          Payment?
+  refunds          Refund[]
+  shipments        Shipment[]
 
   @@unique([merchantId, orderNumber])
   @@index([merchantId])
   @@index([merchantId, status])
   @@index([merchantId, stage])
   @@index([merchantId, createdAt])
-  @@index([merchantId, createdAt, status]) // Composite index for date range + status queries
   @@index([orderNumber])
   @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String
+  productName String?
+  sku         String?
+  imageUrl    String?
+  quantity    Int
+  price       Int
+  createdAt   DateTime @default(now())
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model Shipment {
+  id          String    @id @default(cuid())
+  orderId     String
+  courierName String
+  awb         String
+  trackingUrl String?
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("shipments")
+}
+
+model Refund {
+  id        String       @id @default(cuid())
+  orderId   String
+  amount    Decimal      @db.Decimal(10, 2)
+  reason    String
+  status    RefundStatus @default(PENDING)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("refunds")
+}
+
+model OrderEvent {
+  id        String         @id @default(cuid())
+  orderId   String
+  type      OrderEventType
+  message   String
+  oldValue  Json?
+  newValue  Json?
+  createdBy String
+  createdAt DateTime       @default(now())
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("order_events")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  merchantId        String
+  orderId           String        @unique
+  paymentMethod     PaymentMethod
+  status            PaymentStatus @default(PENDING)
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  razorpaySignature String?
+  upiTransactionId  String?
+  codCollected      Boolean       @default(false)
+  codCollectedAt    DateTime?
+  amount            Decimal       @db.Decimal(10, 2)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  merchant          Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([merchantId, status])
+  @@index([orderId])
+  @@index([razorpayOrderId])
+  @@index([razorpayPaymentId])
+  @@index([merchantId, createdAt])
+  @@map("payments")
+}
+
+model LedgerEntry {
+  id            String       @id @default(cuid())
+  merchantId    String
+  orderId       String
+  type          LedgerType
+  amount        Decimal      @db.Decimal(10, 2)
+  description   String?
+  status        LedgerStatus @default(PENDING)
+  payoutBatchId String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  merchant      Merchant     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  order         Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  payoutBatch   PayoutBatch? @relation(fields: [payoutBatchId], references: [id])
+
+  @@index([merchantId])
+  @@index([merchantId, type])
+  @@index([merchantId, status])
+  @@index([orderId])
+  @@index([payoutBatchId])
+  @@index([merchantId, createdAt])
+  @@map("ledger_entries")
+}
+
+model PayoutBatch {
+  id                String           @id @default(cuid())
+  merchantId        String
+  totalAmount       Decimal          @db.Decimal(10, 2)
+  status            PayoutStatus     @default(PENDING)
+  razorpayPayoutId  String?
+  processedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  cycleId           String?
+  platformInvoiceId String?
+  ledgerEntries     LedgerEntry[]
+  merchant          Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  platformInvoice   PlatformInvoice? @relation(fields: [platformInvoiceId], references: [id])
+
+  @@index([merchantId])
+  @@index([merchantId, status])
+  @@index([merchantId, createdAt])
+  @@index([razorpayPayoutId])
+  @@index([cycleId])
+  @@index([platformInvoiceId])
+  @@map("payout_batches")
+}
+
+model PricingPackage {
+  id                 String                  @id @default(cuid())
+  name               String
+  description        String?
+  status             PricingPackageStatus    @default(DRAFT)
+  fixedFeePaise      Int
+  variableFeeBps     Int
+  domainPricePaise   Int                     @default(9900)
+  domainAllowed      Boolean                 @default(true)
+  domainIncluded     Boolean                 @default(false)
+  payoutFrequency    PayoutFrequency         @default(WEEKLY)
+  holdbackBps        Int                     @default(0)
+  isPayoutHold       Boolean                 @default(false)
+  isActive           Boolean                 @default(true)
+  visibility         PackageVisibility       @default(PUBLIC)
+  deletedAt          DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  code               String                  @unique
+  auditLogs          AdminAuditLog[]
+  merchantFeeConfigs MerchantFeeConfig[]
+  platformSettings   PlatformSettings[]
+  features           PricingPackageFeature[]
+
+  @@index([status])
+  @@index([isActive])
+  @@index([visibility])
+  @@index([deletedAt])
+  @@map("pricing_packages")
+}
+
+model MerchantFeeConfig {
+  id                       String           @id @default(cuid())
+  merchantId               String           @unique
+  pricingPackageId         String?
+  fixedFeeOverridePaise    Int?
+  variableFeeOverrideBps   Int?
+  payoutFrequencyOverride  PayoutFrequency?
+  holdbackOverrideBps      Int?
+  isPayoutHoldOverride     Boolean?
+  domainSubscriptionActive Boolean          @default(false)
+  domainIncludedApplied    Boolean?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+  merchant                 Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  pricingPackage           PricingPackage?  @relation(fields: [pricingPackageId], references: [id])
+
+  @@index([merchantId])
+  @@index([pricingPackageId])
+  @@map("merchant_fee_configs")
+}
+
+model AdminAuditLog {
+  id               String          @id @default(cuid())
+  actorUserId      String
+  actorEmail       String?
+  actionType       String
+  entityType       String
+  entityId         String?
+  reason           String
+  beforeJson       Json?
+  afterJson        Json?
+  ip               String?
+  userAgent        String?
+  metadata         Json?
+  createdAt        DateTime        @default(now())
+  pricingPackageId String?
+  pricingPackage   PricingPackage? @relation(fields: [pricingPackageId], references: [id])
+
+  @@index([actorUserId])
+  @@index([actionType])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
+model PlatformSettings {
+  id                      String          @id @default("singleton")
+  defaultFeePercentageBps Int?            @default(200)
+  defaultFeeFlatPaise     Int?            @default(500)
+  defaultFeeMaxCapPaise   Int?            @default(2500)
+  defaultPricingPackageId String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  defaultPricingPackage   PricingPackage? @relation(fields: [defaultPricingPackageId], references: [id])
+
+  @@map("platform_settings")
+}
+
+model MerchantOnboarding {
+  id                       String           @id @default(cuid())
+  merchantId               String           @unique
+  onboardingStatus         OnboardingStatus @default(NOT_STARTED)
+  completedAt              DateTime?
+  profileCompletionPercent Int?             @default(0)
+  panType                  String?
+  panNumber                String?
+  panName                  String?
+  panDobOrIncorp           DateTime?
+  panHolderRole            String?
+  gstStatus                GstStatus        @default(NOT_REGISTERED)
+  gstin                    String?
+  gstLegalName             String?
+  gstTradeName             String?
+  gstState                 String?
+  gstComposition           Boolean          @default(false)
+  gstNotRegisteredReason   String?
+  storeDisplayName         String?
+  legalBusinessName        String?
+  yearStarted              Int?
+  businessType             String?
+  primaryCategory          String?
+  secondaryCategory        String?
+  avgPriceRange            String?
+  expectedSkuRange         String?
+  invoiceAddressLine1      String?
+  invoiceAddressLine2      String?
+  invoiceCity              String?
+  invoicePincode           String?
+  invoicePhone             String?
+  invoiceEmail             String?
+  invoicePrefix            String?
+  invoiceState             String?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+  dobVerifiedAt            DateTime?        @db.Timestamptz(6)
+  merchant                 Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([onboardingStatus])
+  @@index([onboardingStatus, profileCompletionPercent])
+  @@map("merchant_onboarding")
+}
+
+model MerchantStatusEvent {
+  id              String                  @id @default(cuid())
+  merchantId      String
+  eventType       MerchantStatusEventType
+  reasonCode      String?
+  reasonText      String?
+  createdAt       DateTime                @default(now())
+  createdByUserId String?
+  emailSentAt     DateTime?
+  merchant        Merchant                @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([merchantId, eventType, createdAt])
+  @@map("merchant_status_events")
+}
+
+model OrderNumberCounter {
+  key       String   @id
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("order_number_counters")
+}
+
+model PlatformBillingProfile {
+  id                String   @id @default("platform")
+  legalName         String
+  invoicePrefix     String
+  invoiceNextNumber Int      @default(1)
+  invoicePadding    Int      @default(5)
+  seriesFormat      String   @default("{PREFIX}-{FY}-{NNNNN}")
+  defaultSacCode    String   @default("9983")
+  defaultGstRate    Decimal  @default(18) @db.Decimal(5, 2)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  gstin             String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  state             String?
+  pincode           String?
+  email             String?
+  phone             String?
+  footerNote        String?
+
+  @@map("platform_billing_profile")
+}
+
+model PlatformSettlementCycle {
+  id                 String                   @id @default(cuid())
+  periodStart        DateTime
+  periodEnd          DateTime
+  status             PlatformSettlementStatus @default(DRAFT)
+  invoiceGeneratedAt DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  invoices           PlatformInvoice[]
+
+  @@unique([periodStart, periodEnd])
+  @@index([status])
+  @@index([periodStart])
+  @@index([periodEnd])
+  @@map("platform_settlement_cycles")
+}
+
+model PlatformInvoice {
+  id            String                    @id @default(cuid())
+  merchantId    String
+  cycleId       String
+  invoiceNumber String                    @unique
+  invoiceDate   DateTime
+  currency      String                    @default("INR")
+  subtotal      Decimal                   @db.Decimal(10, 2)
+  gstAmount     Decimal                   @db.Decimal(10, 2)
+  total         Decimal                   @db.Decimal(10, 2)
+  status        PlatformInvoiceStatus     @default(ISSUED)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  payouts       PayoutBatch[]
+  lineItems     PlatformInvoiceLineItem[]
+  cycle         PlatformSettlementCycle   @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  merchant      Merchant                  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([cycleId])
+  @@index([invoiceNumber])
+  @@index([status])
+  @@index([invoiceDate])
+  @@index([merchantId, invoiceDate])
+  @@map("platform_invoices")
+}
+
+model PlatformInvoiceLineItem {
+  id          String          @id @default(cuid())
+  invoiceId   String
+  type        String
+  description String
+  sacCode     String?
+  quantity    Decimal         @db.Decimal(10, 2)
+  unitPrice   Decimal         @db.Decimal(10, 2)
+  amount      Decimal         @db.Decimal(10, 2)
+  gstRate     Decimal         @db.Decimal(5, 2)
+  gstAmount   Decimal         @db.Decimal(10, 2)
+  totalAmount Decimal         @db.Decimal(10, 2)
+  createdAt   DateTime        @default(now())
+  invoice     PlatformInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("platform_invoice_line_items")
+}
+
+model MerchantStoreSettings {
+  id                     String   @id @default(cuid())
+  merchantId             String   @unique
+  storeName              String
+  tagline                String?
+  description            String?
+  logoUrl                String?
+  bannerUrl              String?
+  faviconUrl             String?
+  brandPrimaryColor      String?
+  brandSecondaryColor    String?
+  supportEmail           String?
+  supportPhone           String?
+  whatsappNumber         String?
+  businessAddressLine1   String?
+  businessAddressLine2   String?
+  city                   String?
+  state                  String?
+  pincode                String?
+  returnPolicy           String?
+  refundPolicy           String?
+  shippingPolicy         String?
+  termsAndConditions     String?
+  privacyPolicy          String?
+  instagramUrl           String?
+  facebookUrl            String?
+  youtubeUrl             String?
+  linkedinUrl            String?
+  twitterUrl             String?
+  googleAnalyticsId      String?
+  metaPixelId            String?
+  isStoreLive            Boolean  @default(true)
+  showOutOfStockProducts Boolean  @default(true)
+  allowGuestCheckout     Boolean  @default(true)
+  storeTimezone          String   @default("Asia/Kolkata")
+  seoTitle               String?
+  seoDescription         String?
+  ogImageUrl             String?
+  invoicePrefix          String?
+  invoiceNextNumber      Int?     @default(1)
+  invoicePadding         Int?     @default(5)
+  invoiceSeriesFormat    String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  merchant               Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([isStoreLive])
+  @@map("merchant_store_settings")
+}
+
+model MerchantBankAccount {
+  id                 String                 @id @default(cuid())
+  merchantId         String                 @unique
+  accountHolderName  String
+  bankName           String
+  accountNumber      String
+  ifscCode           String
+  accountType        BankAccountType
+  verificationStatus BankVerificationStatus @default(NOT_SUBMITTED)
+  proofType          BankProofType?
+  proofDocumentUrl   String?
+  proofUploadedAt    DateTime?
+  submittedAt        DateTime?
+  verifiedAt         DateTime?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  merchant           Merchant               @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([verificationStatus])
+  @@map("merchant_bank_accounts")
+}
+
+model Feature {
+  id                String                    @id @default(cuid())
+  key               String                    @unique
+  name              String
+  description       String?
+  category          String?
+  isBeta            Boolean                   @default(false)
+  valueType         FeatureValueType
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  isActive          Boolean                   @default(true)
+  merchantOverrides MerchantFeatureOverride[]
+  packageFeatures   PricingPackageFeature[]
+
+  @@index([key])
+  @@index([category])
+  @@map("features")
+}
+
+model PricingPackageFeature {
+  id               String         @id @default(cuid())
+  pricingPackageId String
+  featureId        String
+  enabled          Boolean        @default(false)
+  valueJson        Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  feature          Feature        @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  pricingPackage   PricingPackage @relation(fields: [pricingPackageId], references: [id], onDelete: Cascade)
+
+  @@unique([pricingPackageId, featureId])
+  @@index([pricingPackageId])
+  @@index([featureId])
+  @@map("pricing_package_features")
+}
+
+model MerchantFeatureOverride {
+  id         String              @id @default(cuid())
+  merchantId String
+  featureId  String
+  mode       FeatureOverrideMode
+  valueJson  Json?
+  note       String?
+  createdBy  String
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  feature    Feature             @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  merchant   Merchant            @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, featureId])
+  @@index([merchantId])
+  @@index([featureId])
+  @@index([merchantId, featureId])
+  @@map("merchant_feature_overrides")
+}
+
+model FeatureAccessLog {
+  id          String                @id @default(cuid())
+  merchantId  String
+  featureKey  String
+  decision    FeatureAccessDecision
+  reason      String?
+  path        String?
+  actorUserId String?
+  createdAt   DateTime              @default(now())
+
+  @@index([merchantId])
+  @@index([featureKey])
+  @@index([decision])
+  @@index([merchantId, featureKey, createdAt])
+  @@index([createdAt])
+  @@map("feature_access_logs")
+}
+
+model Ticket {
+  id               String               @id @default(cuid())
+  merchantId       String
+  subject          String
+  status           TicketStatus         @default(OPEN)
+  priority         TicketPriority       @default(MEDIUM)
+  assignedToUserId String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  resolvedAt       DateTime?
+  closedAt         DateTime?
+  internalNotes    TicketInternalNote[]
+  messages         TicketMessage[]
+  merchant         Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([status])
+  @@index([priority])
+  @@index([assignedToUserId])
+  @@index([merchantId, status])
+  @@index([merchantId, createdAt])
+  @@index([status, priority])
+  @@index([createdAt])
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id              String           @id @default(cuid())
+  ticketId        String
+  senderType      TicketSenderType
+  senderUserId    String?
+  message         String
+  attachmentsJson Json?
+  createdAt       DateTime         @default(now())
+  ticket          Ticket           @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([ticketId, createdAt])
+  @@map("ticket_messages")
+}
+
+model TicketInternalNote {
+  id          String   @id @default(cuid())
+  ticketId    String
+  adminUserId String
+  note        String
+  createdAt   DateTime @default(now())
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([ticketId, createdAt])
+  @@map("ticket_internal_notes")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  ACTIVE
+}
+
+enum MerchantAccountStatus {
+  ACTIVE
+  ON_HOLD
+}
+
+enum MerchantKycStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum StorefrontMode {
+  THEME
+  BUILDER
+  CUSTOM_CODE
 }
 
 enum OrderStatus {
@@ -342,77 +840,6 @@ enum OrderStage {
   RETURNED
 }
 
-// Order items
-
-model OrderItem {
-  id        String   @id @default(cuid())
-  orderId   String
-  productId String
-  productName String?
-  sku         String?
-  imageUrl    String?
-  quantity    Int
-  price       Int
-  createdAt DateTime @default(now())
-
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
-
-  @@index([orderId])
-  @@index([productId])
-  @@index([productId, createdAt]) // Composite index for sales by product queries
-  @@map("order_items")
-}
-
-model Shipment {
-  id          String   @id @default(cuid())
-  orderId     String
-  courierName String
-  awb         String
-  trackingUrl String?
-  shippedAt   DateTime?
-  deliveredAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([orderId])
-  @@map("shipments")
-}
-
-model Refund {
-  id        String        @id @default(cuid())
-  orderId   String
-  amount    Decimal       @db.Decimal(10, 2)
-  reason    String
-  status    RefundStatus  @default(PENDING)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([orderId])
-  @@map("refunds")
-}
-
-model OrderEvent {
-  id        String         @id @default(cuid())
-  orderId   String
-  type      OrderEventType
-  message   String
-  oldValue  Json?
-  newValue  Json?
-  createdBy String
-  createdAt DateTime       @default(now())
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([orderId])
-  @@index([createdAt])
-  @@map("order_events")
-}
-
 enum RefundStatus {
   PENDING
   COMPLETED
@@ -429,42 +856,6 @@ enum OrderEventType {
 enum InvoiceType {
   TAX_INVOICE
   BILL_OF_SUPPLY
-}
-
-// ============================================================================
-// PAYMENTS
-// ============================================================================
-
-model Payment {
-  id            String        @id @default(cuid())
-  merchantId    String
-  orderId       String        @unique
-  paymentMethod PaymentMethod
-  status        PaymentStatus @default(PENDING)
-
-  razorpayOrderId   String?
-  razorpayPaymentId String?
-  razorpaySignature String?
-
-  upiTransactionId String?
-
-  codCollected   Boolean   @default(false)
-  codCollectedAt DateTime?
-
-  amount    Decimal  @db.Decimal(10, 2)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([merchantId])
-  @@index([merchantId, status])
-  @@index([orderId])
-  @@index([razorpayOrderId])
-  @@index([razorpayPaymentId])
-  @@index([merchantId, createdAt])
-  @@map("payments")
 }
 
 enum PaymentMethod {
@@ -489,38 +880,8 @@ enum SettlementStatus {
   SETTLED
 }
 
-// ============================================================================
-// LEDGER & PAYOUTS
-// ============================================================================
-
-model LedgerEntry {
-  id            String       @id @default(cuid())
-  merchantId    String
-  orderId       String
-  type          LedgerType
-  amount        Decimal      @db.Decimal(10, 2)
-  description   String?
-  status        LedgerStatus @default(PENDING)
-  payoutBatchId String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-
-  merchant    Merchant     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  payoutBatch PayoutBatch? @relation(fields: [payoutBatchId], references: [id], onDelete: SetNull)
-
-  @@index([merchantId])
-  @@index([merchantId, type])
-  @@index([merchantId, status])
-  @@index([orderId])
-  @@index([payoutBatchId])
-  @@index([merchantId, createdAt])
-  @@map("ledger_entries")
-}
-
 enum LedgerType {
   GROSS_ORDER_VALUE
-  COUPON_DISCOUNT
   PLATFORM_FEE
   ORDER_PAYOUT
   PAYOUT_PROCESSED
@@ -533,71 +894,11 @@ enum LedgerStatus {
   FAILED
 }
 
-model PayoutBatch {
-  id                String       @id @default(cuid())
-  merchantId        String
-  totalAmount       Decimal      @db.Decimal(10, 2)
-  status            PayoutStatus @default(PENDING)
-  razorpayPayoutId  String?
-  processedAt       DateTime?
-  cycleId           String?
-  platformInvoiceId String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-
-  merchant       Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  ledgerEntries  LedgerEntry[]
-  platformInvoice PlatformInvoice? @relation(fields: [platformInvoiceId], references: [id], onDelete: SetNull)
-
-  @@index([merchantId])
-  @@index([merchantId, status])
-  @@index([merchantId, createdAt])
-  @@index([razorpayPayoutId])
-  @@index([cycleId])
-  @@index([platformInvoiceId])
-  @@map("payout_batches")
-}
-
 enum PayoutStatus {
   PENDING
   PROCESSING
   COMPLETED
   FAILED
-}
-
-// ============================================================================
-// PRICING PACKAGES
-// ============================================================================
-
-model PricingPackage {
-  id               String                @id @default(cuid())
-  name             String
-  description      String?
-  status           PricingPackageStatus  @default(DRAFT) // DRAFT, PUBLISHED, ARCHIVED
-  fixedFeePaise    Int                   // per successful order fixed fee
-  variableFeeBps   Int                   // per successful order % fee in bps
-  domainPricePaise Int                   @default(9900) // ₹99 default
-  domainAllowed    Boolean               @default(true) // merchant can buy domain add-on
-  domainIncluded   Boolean               @default(false) // if true, domain is included in plan
-  payoutFrequency  PayoutFrequency       @default(WEEKLY)
-  holdbackBps      Int                   @default(0)
-  isPayoutHold     Boolean               @default(false)
-  isActive         Boolean               @default(true)
-  visibility       PackageVisibility     @default(PUBLIC)
-  deletedAt        DateTime?             // soft delete
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-
-  merchantFeeConfigs MerchantFeeConfig[]
-  auditLogs         AdminAuditLog[]
-  platformSettings  PlatformSettings[]
-  features          PricingPackageFeature[]
-
-  @@index([status])
-  @@index([isActive])
-  @@index([visibility])
-  @@index([deletedAt])
-  @@map("pricing_packages")
 }
 
 enum PricingPackageStatus {
@@ -617,66 +918,6 @@ enum PackageVisibility {
   INTERNAL
 }
 
-// ============================================================================
-// MERCHANT FEE CONFIGURATION
-// ============================================================================
-
-model MerchantFeeConfig {
-  id                        String   @id @default(cuid())
-  merchantId                String   @unique
-  pricingPackageId          String?
-  
-  // Admin-only overrides
-  fixedFeeOverridePaise     Int?
-  variableFeeOverrideBps    Int?
-  payoutFrequencyOverride   PayoutFrequency?
-  holdbackOverrideBps       Int?
-  isPayoutHoldOverride      Boolean?
-  
-  // Domain subscription
-  domainSubscriptionActive     Boolean @default(false)
-  domainIncludedApplied        Boolean? // record if domainIncluded was applied
-  
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
-
-  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  pricingPackage PricingPackage? @relation(fields: [pricingPackageId], references: [id], onDelete: SetNull)
-
-  @@index([merchantId])
-  @@index([pricingPackageId])
-  @@map("merchant_fee_configs")
-}
-
-// ============================================================================
-// ADMIN AUDIT LOG
-// ============================================================================
-
-model AdminAuditLog {
-  id          String   @id @default(cuid())
-  actorUserId String   // Clerk userId (renamed from adminUserId)
-  actorEmail  String?  // Optional email
-  actionType  String   // AuditAction enum value or custom string
-  entityType  String   // "PricingPackage", "MerchantFeeConfig", "Merchant", etc.
-  entityId    String?
-  reason      String   // mandatory reason
-  beforeJson  Json?    // snapshot before change
-  afterJson   Json?     // snapshot after change
-  ip          String?  // Optional IP address
-  userAgent   String?  // Optional user agent
-  metadata    Json?    // Optional metadata for debugging/context
-  createdAt   DateTime @default(now())
-
-  pricingPackage PricingPackage? @relation(fields: [pricingPackageId], references: [id], onDelete: SetNull)
-  pricingPackageId String?
-
-  @@index([actorUserId])
-  @@index([actionType])
-  @@index([entityType, entityId])
-  @@index([createdAt])
-  @@map("admin_audit_logs")
-}
-
 enum AuditAction {
   PRICING_PACKAGE_CREATE
   PRICING_PACKAGE_UPDATE
@@ -694,115 +935,6 @@ enum AuditAction {
   PLATFORM_SETTINGS_UPDATE
 }
 
-// ============================================================================
-// PLATFORM SETTINGS (SINGLETON)
-// ============================================================================
-
-model PlatformSettings {
-  id                      String   @id @default("singleton")
-  defaultFeePercentageBps Int?     @default(200) // 2% default (legacy)
-  defaultFeeFlatPaise     Int?     @default(500) // ₹5 default (legacy)
-  defaultFeeMaxCapPaise   Int?     @default(2500) // ₹25 default (legacy)
-  defaultPricingPackageId String?  // default package for new merchants
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-
-  defaultPricingPackage PricingPackage? @relation(fields: [defaultPricingPackageId], references: [id], onDelete: SetNull)
-
-  @@map("platform_settings")
-}
-
-// ============================================================================
-// MERCHANT ONBOARDING
-// ============================================================================
-
-model MerchantOnboarding {
-  id          String              @id @default(cuid())
-  merchantId  String              @unique
-  
-  // Onboarding status
-  onboardingStatus OnboardingStatus @default(NOT_STARTED)
-  completedAt      DateTime?
-  profileCompletionPercent Int?   @default(0) // 0-100
-  
-  // PAN Details (Layer 1 - Compliance)
-  panType         String?  // "INDIVIDUAL" | "COMPANY" | "HUF" | "PARTNERSHIP" | "LLP" | "AOP" | "BOI"
-  panNumber       String?  // 10 alphanumeric characters
-  panName         String?  // Name as per PAN
-  panDobOrIncorp  DateTime? // Date of birth (individual) or Incorporation date (company)
-  panHolderRole   String?  // "PROPRIETOR" | "DIRECTOR" | "PARTNER" | etc.
-  dobVerifiedAt   DateTime? // Timestamp when DOB was verified (age 18+ check passed)
-  
-  // GST Details (Layer 1 - Compliance)
-  gstStatus              GstStatus @default(NOT_REGISTERED)
-  gstin                  String?   // 15 alphanumeric characters (if REGISTERED)
-  gstLegalName           String?   // Legal name as per GST certificate
-  gstTradeName           String?   // Trade name (if different)
-  gstState               String?   // State code (2 digits) or state name
-  gstComposition         Boolean   @default(false) // Composition scheme
-  gstNotRegisteredReason String?   // Reason if NOT_REGISTERED
-  
-  // Business Basics (Layer 2)
-  storeDisplayName   String?  // Display name for store (can differ from legal name)
-  legalBusinessName  String?  // Legal business name
-  yearStarted        Int?     // Year business started
-  businessType       String?  // "SOLE_PROPRIETORSHIP" | "PARTNERSHIP" | "LLP" | "PVT_LTD" | "PUBLIC_LTD" | "HUF" | "OTHER"
-  primaryCategory    String?  // Primary product category
-  secondaryCategory  String?  // Secondary category (optional)
-  avgPriceRange      String?  // "UNDER_500" | "500_1000" | "1000_5000" | "5000_10000" | "ABOVE_10000"
-  expectedSkuRange   String?  // "UNDER_10" | "10_50" | "50_100" | "100_500" | "ABOVE_500"
-  
-  // Invoice/Billing Address (Layer 1 - Compliance)
-  // All fields are optional to allow onboarding record creation before invoice step
-  // Validation is enforced at UI/validation layer, not database level
-  invoiceAddressLine1 String?  // Billing address line 1 (optional, validated at UI level)
-  invoiceAddressLine2 String?  // Billing address line 2 (optional)
-  invoiceCity         String?  // Billing city (optional, validated at UI level)
-  invoicePincode      String?  // Billing pincode (6 digits, optional, validated at UI level)
-  invoicePhone        String?  // Billing phone (10-13 digits, optional)
-  invoiceEmail        String?  // Billing email (optional)
-  invoicePrefix       String?  // Invoice number prefix (max 8 chars, A-Z0-9, optional)
-  invoiceState        String?  // Billing state (optional, validated at UI level)
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  validationLogs OnboardingValidationLog[]
-
-  @@index([merchantId])
-  @@index([onboardingStatus])
-  @@index([onboardingStatus, profileCompletionPercent])
-  @@map("merchant_onboarding")
-}
-
-// ============================================================================
-// ONBOARDING VALIDATION LOG (AUDIT TRAIL)
-// ============================================================================
-
-model OnboardingValidationLog {
-  id                    String   @id @default(cuid())
-  merchantId            String
-  merchantOnboardingId  String
-  step                  String   // "pan" | "gst"
-  field                 String   // "panNumber" | "gstin"
-  validationType        String   // "PAN_4TH_CHAR" | "GST_PAN_MATCH"
-  passed                Boolean  // true if validation passed, false if failed
-  errorMessage          String?  // Error message if failed
-  inputValue            String?  // Sanitized input value (for debugging, not full PAN/GST)
-  createdAt             DateTime @default(now())
-
-  merchant           Merchant           @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  merchantOnboarding MerchantOnboarding @relation(fields: [merchantOnboardingId], references: [id], onDelete: Cascade)
-
-  @@index([merchantId])
-  @@index([merchantOnboardingId])
-  @@index([merchantId, step, createdAt])
-  @@index([validationType, passed])
-  @@index([createdAt])
-  @@map("onboarding_validation_logs")
-}
-
 enum OnboardingStatus {
   NOT_STARTED
   IN_PROGRESS
@@ -815,159 +947,10 @@ enum GstStatus {
   NOT_REGISTERED
 }
 
-// ============================================================================
-// MERCHANT STATUS EVENTS (AUDIT LOG FOR HOLDS & KYC)
-// ============================================================================
-
-model MerchantStatusEvent {
-  id          String                  @id @default(cuid())
-  merchantId  String
-  eventType   MerchantStatusEventType
-  reasonCode  String?
-  reasonText  String?
-  createdAt   DateTime                @default(now())
-  createdByUserId String?
-  emailSentAt DateTime?
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  @@index([merchantId])
-  @@index([eventType])
-  @@index([createdAt])
-  @@index([merchantId, eventType, createdAt])
-  @@map("merchant_status_events")
-}
-
-model MerchantStatusHistory {
-  id                  String                @id @default(cuid())
-  merchantId          String
-  fromAccountStatus   MerchantAccountStatus?
-  toAccountStatus     MerchantAccountStatus
-  fromKycStatus       MerchantKycStatus?
-  toKycStatus         MerchantKycStatus?
-  reason              String?               // Hold reason code or general reason
-  reasonText          String?               // Additional notes
-  changedByAdminUserId String?
-  createdAt           DateTime               @default(now())
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  @@index([merchantId])
-  @@index([createdAt])
-  @@index([merchantId, createdAt])
-  @@map("merchant_status_history")
-}
-
 enum MerchantStatusEventType {
   HOLD_APPLIED
   HOLD_RELEASED
   KYC_APPROVED
-}
-
-// ============================================================================
-// ORDER NUMBER GENERATION
-// ============================================================================
-
-model OrderNumberCounter {
-  key      String   @id // Format: "ORD-YYMM" (e.g., "ORD-2602")
-  value    Int      @default(0)
-  updatedAt DateTime @updatedAt
-  
-  @@map("order_number_counters")
-}
-
-// ============================================================================
-// COUPONS & DISCOUNTS
-// ============================================================================
-
-enum CouponType {
-  PERCENT
-  FIXED
-}
-
-model Coupon {
-  id            String      @id @default(cuid())
-  merchantId    String
-  code          String      // Unique per merchant
-  type          CouponType
-  value         Decimal     @db.Decimal(10, 2) // Percentage (0-100) or fixed amount in INR
-  minOrderAmount Decimal?   @db.Decimal(10, 2) // Minimum order amount in INR
-  maxDiscount   Decimal?    @db.Decimal(10, 2) // Maximum discount in INR (for PERCENT type)
-  validFrom     DateTime
-  validUntil    DateTime?
-  usageLimit    Int?        // Total usage limit (null = unlimited)
-  isActive      Boolean     @default(true)
-  description   String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  redemptions CouponRedemption[]
-
-  @@unique([merchantId, code])
-  @@index([merchantId])
-  @@index([merchantId, code])
-  @@index([merchantId, isActive])
-  @@map("coupons")
-}
-
-model CouponRedemption {
-  id          String   @id @default(cuid())
-  couponId   String
-  orderId    String   @unique
-  merchantId String
-  customerEmail String?
-  customerPhone String?
-  discountAmount Decimal @db.Decimal(10, 2) // Actual discount applied in INR
-  createdAt   DateTime @default(now())
-
-  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
-  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  @@index([couponId])
-  @@index([orderId])
-  @@index([merchantId])
-  @@index([customerEmail])
-  @@index([createdAt])
-  @@map("coupon_redemptions")
-}
-
-// ============================================================================
-// PLATFORM BILLING & INVOICING
-// ============================================================================
-
-model PlatformBillingProfile {
-  id                String   @id @default("platform")
-  legalName         String
-  invoicePrefix     String
-  invoiceNextNumber Int      @default(1)
-  invoicePadding    Int      @default(5)
-  seriesFormat      String   @default("{PREFIX}-{FY}-{NNNNN}")
-  defaultSacCode    String   @default("9983")
-  defaultGstRate    Decimal  @db.Decimal(5, 2) @default(18)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  @@map("platform_billing_profile")
-}
-
-model PlatformSettlementCycle {
-  id                String                    @id @default(cuid())
-  periodStart       DateTime
-  periodEnd         DateTime
-  status            PlatformSettlementStatus  @default(DRAFT)
-  invoiceGeneratedAt DateTime?
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
-
-  invoices PlatformInvoice[]
-
-  @@unique([periodStart, periodEnd])
-  @@index([status])
-  @@index([periodStart])
-  @@index([periodEnd])
-  @@map("platform_settlement_cycles")
 }
 
 enum PlatformSettlementStatus {
@@ -976,172 +959,10 @@ enum PlatformSettlementStatus {
   PAID
 }
 
-model PlatformInvoice {
-  id            String              @id @default(cuid())
-  merchantId    String
-  cycleId       String
-  invoiceNumber String               @unique
-  invoiceDate   DateTime
-  currency      String               @default("INR")
-  subtotal      Decimal              @db.Decimal(10, 2)
-  gstAmount     Decimal              @db.Decimal(10, 2)
-  total         Decimal              @db.Decimal(10, 2)
-  status        PlatformInvoiceStatus @default(ISSUED)
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-
-  merchant  Merchant                @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  cycle     PlatformSettlementCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  lineItems PlatformInvoiceLineItem[]
-  payouts   PayoutBatch[]
-
-  @@index([merchantId])
-  @@index([cycleId])
-  @@index([invoiceNumber])
-  @@index([status])
-  @@index([invoiceDate])
-  @@index([merchantId, invoiceDate])
-  @@map("platform_invoices")
-}
-
 enum PlatformInvoiceStatus {
   ISSUED
   PAID
   CANCELLED
-}
-
-model PlatformInvoiceLineItem {
-  id          String   @id @default(cuid())
-  invoiceId   String
-  type        String   // "PLATFORM_FEE", etc.
-  description String
-  sacCode     String?
-  quantity    Decimal  @db.Decimal(10, 2)
-  unitPrice   Decimal  @db.Decimal(10, 2)
-  amount      Decimal  @db.Decimal(10, 2)
-  gstRate     Decimal  @db.Decimal(5, 2)
-  gstAmount   Decimal  @db.Decimal(10, 2)
-  totalAmount Decimal  @db.Decimal(10, 2)
-  createdAt   DateTime @default(now())
-
-  invoice PlatformInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-
-  @@index([invoiceId])
-  @@map("platform_invoice_line_items")
-}
-
-// ============================================================================
-// MERCHANT STORE SETTINGS
-// ============================================================================
-
-model MerchantStoreSettings {
-  id                        String   @id @default(cuid())
-  merchantId                String   @unique
-  
-  // Store branding
-  storeName                 String
-  tagline                   String?
-  description               String?
-  logoUrl                   String?
-  bannerUrl                 String?
-  faviconUrl                String?
-  brandPrimaryColor         String?
-  brandSecondaryColor       String?
-  
-  // Contact & support
-  supportEmail              String?
-  supportPhone              String?
-  whatsappNumber            String?
-  
-  // Business address
-  businessAddressLine1      String?
-  businessAddressLine2      String?
-  city                      String?
-  state                     String?
-  pincode                   String?
-  
-  // Policies
-  returnPolicy              String?  @db.Text
-  refundPolicy              String?  @db.Text
-  shippingPolicy            String?  @db.Text
-  termsAndConditions        String?  @db.Text
-  privacyPolicy             String?  @db.Text
-  
-  // Social links
-  instagramUrl              String?
-  facebookUrl               String?
-  youtubeUrl                String?
-  linkedinUrl               String?
-  twitterUrl                String?
-  
-  // Analytics & tracking
-  googleAnalyticsId          String?
-  metaPixelId               String?
-  
-  // Store configuration
-  isStoreLive               Boolean  @default(true)
-  showOutOfStockProducts    Boolean  @default(true)
-  allowGuestCheckout        Boolean  @default(true)
-  storeTimezone             String   @default("Asia/Kolkata")
-  
-  // SEO
-  seoTitle                  String?
-  seoDescription            String?
-  ogImageUrl                String?
-  
-  // Invoice settings
-  invoicePrefix             String?
-  invoiceNextNumber         Int?     @default(1)
-  invoicePadding            Int?     @default(5)
-  invoiceSeriesFormat       String?
-  
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  @@index([merchantId])
-  @@index([isStoreLive])
-  @@map("merchant_store_settings")
-}
-
-// ============================================================================
-// MERCHANT BANK ACCOUNT
-// ============================================================================
-
-model MerchantBankAccount {
-  id                  String                  @id @default(cuid())
-  merchantId          String                  @unique
-  
-  // Account details
-  accountHolderName   String
-  bankName            String
-  accountNumber       String
-  ifscCode            String
-  accountType         BankAccountType
-  
-  // Verification status
-  verificationStatus  BankVerificationStatus  @default(NOT_SUBMITTED)
-  
-  // Proof document
-  proofType           BankProofType?
-  proofDocumentUrl    String?
-  proofUploadedAt     DateTime?
-  
-  // Submission & verification
-  submittedAt         DateTime?
-  verifiedAt          DateTime?
-  rejectedAt          DateTime?
-  rejectionReason     String?
-  
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  @@index([merchantId])
-  @@index([verificationStatus])
-  @@map("merchant_bank_accounts")
 }
 
 enum BankAccountType {
@@ -1161,26 +982,6 @@ enum BankProofType {
   BANK_STATEMENT
 }
 
-// ============================================================================
-// FEATURE GATING SYSTEM
-// ============================================================================
-
-model Feature {
-  id          String      @id @default(cuid())
-  key         String      @unique // e.g., "CUSTOM_DOMAIN"
-  name        String      // Human-readable name
-  description String?     // Feature description
-  valueType   FeatureValueType
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  packageFeatures PricingPackageFeature[]
-  merchantOverrides MerchantFeatureOverride[]
-
-  @@index([key])
-  @@map("features")
-}
-
 enum FeatureValueType {
   BOOLEAN
   NUMBER
@@ -1188,80 +989,16 @@ enum FeatureValueType {
   JSON
 }
 
-model PricingPackageFeature {
-  id              String   @id @default(cuid())
-  pricingPackageId String
-  featureId        String
-  enabled          Boolean  @default(false)
-  valueJson        Json?    // For NUMBER/STRING/JSON types, store as Json
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  pricingPackage PricingPackage @relation(fields: [pricingPackageId], references: [id], onDelete: Cascade)
-  feature        Feature         @relation(fields: [featureId], references: [id], onDelete: Cascade)
-
-  @@unique([pricingPackageId, featureId])
-  @@index([pricingPackageId])
-  @@index([featureId])
-  @@map("pricing_package_features")
-}
-
-model MerchantFeatureOverride {
-  id          String                    @id @default(cuid())
-  merchantId  String
-  featureId   String
-  mode        FeatureOverrideMode
-  valueJson   Json?                     // For OVERRIDE mode, store custom value
-  note       String?                    // Why this override exists
-  createdBy  String                     // Admin user ID or email
-  createdAt  DateTime                   @default(now())
-  updatedAt  DateTime                   @updatedAt
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  feature  Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
-
-  @@unique([merchantId, featureId])
-  @@index([merchantId])
-  @@index([featureId])
-  @@index([merchantId, featureId])
-  @@map("merchant_feature_overrides")
-}
-
 enum FeatureOverrideMode {
-  ENABLE   // Force enable (use package value)
-  DISABLE  // Force disable
-  OVERRIDE // Force enable with custom value
-}
-
-model FeatureAccessLog {
-  id          String            @id @default(cuid())
-  merchantId  String
-  featureKey  String            // Denormalized for query performance (references Feature.key)
-  decision    FeatureAccessDecision
-  reason      String?           // Why denied/allowed
-  path        String?           // Request path
-  actorUserId String?           // User who made the request
-  createdAt   DateTime          @default(now())
-
-  // Note: No direct relation to Feature (key is not a primary key)
-  // Use featureKey for queries and joins in application code
-
-  @@index([merchantId])
-  @@index([featureKey])
-  @@index([decision])
-  @@index([merchantId, featureKey, createdAt])
-  @@index([createdAt])
-  @@map("feature_access_logs")
+  ENABLE
+  DISABLE
+  OVERRIDE
 }
 
 enum FeatureAccessDecision {
   ALLOW
   DENY
 }
-
-// ============================================================================
-// SUPPORT TICKETING
-// ============================================================================
 
 enum TicketStatus {
   OPEN
@@ -1279,59 +1016,4 @@ enum TicketPriority {
 enum TicketSenderType {
   MERCHANT
   ADMIN
-}
-
-model Ticket {
-  id              String         @id @default(cuid())
-  merchantId      String
-  subject         String
-  status          TicketStatus   @default(OPEN)
-  priority        TicketPriority @default(MEDIUM)
-  assignedToUserId String?       // Supabase auth user ID of assigned admin
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  resolvedAt      DateTime?
-  closedAt        DateTime?
-
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  messages TicketMessage[]
-  internalNotes TicketInternalNote[]
-
-  @@index([merchantId])
-  @@index([status])
-  @@index([priority])
-  @@index([assignedToUserId])
-  @@index([merchantId, status])
-  @@index([createdAt])
-  @@map("tickets")
-}
-
-model TicketMessage {
-  id            String           @id @default(cuid())
-  ticketId      String
-  senderType    TicketSenderType
-  senderUserId  String?          // Supabase auth user ID (merchant or admin)
-  message       String
-  attachmentsJson Json?          // Array of {url: string, filename: string}
-  createdAt     DateTime         @default(now())
-
-  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-
-  @@index([ticketId])
-  @@index([ticketId, createdAt])
-  @@map("ticket_messages")
-}
-
-model TicketInternalNote {
-  id          String   @id @default(cuid())
-  ticketId    String
-  adminUserId String   // Supabase auth user ID
-  note        String
-  createdAt   DateTime @default(now())
-
-  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-
-  @@index([ticketId])
-  @@index([ticketId, createdAt])
-  @@map("ticket_internal_notes")
 }
