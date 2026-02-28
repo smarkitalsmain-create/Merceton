@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation"
 import { requireMerchant } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getMerchantOnboarding } from "@/lib/onboarding"
 import { getEffectiveFeatures } from "@/lib/gating/canUse"
 import { DashboardSidebar } from "@/components/DashboardSidebar"
@@ -28,17 +27,11 @@ export default async function DashboardLayout({
 
   // This will redirect to onboarding/create-store if no merchant
   const merchant = await requireMerchant()
-
-  // Fetch merchant status for banner
-  const dbMerchant = await prisma.merchant.findUnique({
-    where: { id: merchant.id },
-    select: {
-      accountStatus: true,
-      kycStatus: true,
-      holdReasonCode: true,
-      holdReasonText: true,
-    },
-  })
+  // Use merchant from requireMerchant for banner (already includes accountStatus, kycStatus, etc.)
+  const accountStatus = merchant.accountStatus
+  const kycStatus = merchant.kycStatus
+  const holdReasonCode = merchant.holdReasonCode
+  const holdReasonText = merchant.holdReasonText
 
   // Check onboarding status - enforce completion for all dashboard routes except onboarding itself
   const onboarding = await getMerchantOnboarding(merchant.id)
@@ -68,14 +61,12 @@ export default async function DashboardLayout({
                 </div>
               </header>
               <main className="flex-1 overflow-y-auto p-6">
-                {dbMerchant && (
-                  <MerchantStatusBanner
-                    accountStatus={dbMerchant.accountStatus}
-                    kycStatus={dbMerchant.kycStatus}
-                    holdReasonCode={dbMerchant.holdReasonCode}
-                    holdReasonText={dbMerchant.holdReasonText}
-                  />
-                )}
+                <MerchantStatusBanner
+                  accountStatus={accountStatus}
+                  kycStatus={kycStatus}
+                  holdReasonCode={holdReasonCode ?? null}
+                  holdReasonText={holdReasonText ?? null}
+                />
                 {children}
               </main>
             </div>

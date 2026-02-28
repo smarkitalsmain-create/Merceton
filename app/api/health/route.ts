@@ -1,59 +1,25 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
 /**
- * Health Check Route
- *
- * Tests database connectivity and access to core models (including tickets).
- * Used for monitoring and deployment verification.
- *
- * GET /api/health
- *
- * Returns:
- * - 200 { status: "ok" } on success
- * - 500 { status: "error", error: string } on failure (e.g. missing table)
+ * Lightweight health check: one DB roundtrip, returns latency.
+ * GET /api/health → { ok: true, dbLatencyMs } or 500 with JSON error.
  */
 export async function GET() {
+  const start = Date.now()
   try {
-    await prisma.$connect()
-
-    // Lightweight checks for core tables (minimal query cost)
-    await Promise.all([
-      prisma.user.findFirst({ select: { id: true }, take: 1 }),
-      prisma.merchant.findFirst({ select: { id: true }, take: 1 }),
-      prisma.order.findFirst({ select: { id: true }, take: 1 }),
-      prisma.product.findFirst({ select: { id: true }, take: 1 }),
-      prisma.orderNumberCounter.findFirst({ take: 1 }),
-      // Ensure tickets table exists; missing table causes prisma.ticket to throw
-      prisma.ticket.findFirst({ select: { id: true }, take: 1 }),
-    ])
-
-    return NextResponse.json({ status: "ok" }, { status: 200 })
+    await prisma.$queryRaw`SELECT 1`
+    const dbLatencyMs = Date.now() - start
+    return NextResponse.json({ ok: true, dbLatencyMs }, { status: 200 })
   } catch (error: unknown) {
-    const err = error as { message?: string; code?: string; errorCode?: string }
-    const errorMessage = err?.message ?? String(error)
-    const errorCode = err?.code ?? err?.errorCode ?? "UNKNOWN"
-
-    const isMissingTable =
-      errorMessage.includes("does not exist") ||
-      errorMessage.includes("tickets") ||
-      errorCode === "P2021" // Prisma: "The table does not exist"
-
-    const responseError = isMissingTable
-      ? "Database schema missing: tickets table does not exist. Run: npx prisma migrate deploy"
-      : errorMessage
-
-    console.error("[Health Check] Database health check failed:", {
-      message: errorMessage,
-      code: errorCode,
-      timestamp: new Date().toISOString(),
-    })
-
+    const dbLatencyMs = Date.now() - start
+    const message = error instanceof Error ? error.message : String(error)
+    console.error("[health] DB check failed:", message)
     return NextResponse.json(
-      {
-        status: "error",
-        error: responseError,
-      },
+      { ok: false, error: message, dbLatencyMs },
       { status: 500 }
     )
   }

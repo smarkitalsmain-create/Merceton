@@ -1,8 +1,10 @@
 /**
  * Admin dashboard stats: aggregates only, no full rows.
  * Safe for production; Decimal results converted to number.
+ * Uses single $transaction to reduce roundtrips.
  */
 
+import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 
 function toNum(value: unknown): number {
@@ -23,7 +25,7 @@ export interface AdminStats {
   last7DaysGmv: number
 }
 
-export async function getAdminStats(): Promise<AdminStats> {
+async function getAdminStatsUncached(): Promise<AdminStats> {
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
@@ -34,7 +36,7 @@ export async function getAdminStats(): Promise<AdminStats> {
     platformFeesFromOrders,
     payoutsCompletedAgg,
     payoutsPendingAgg,
-  ] = await Promise.all([
+  ] = await prisma.$transaction([
     prisma.merchant.count(),
     prisma.order.aggregate({
       _count: { id: true },
@@ -78,4 +80,15 @@ export async function getAdminStats(): Promise<AdminStats> {
     last7DaysOrders: ordersLast7Agg._count.id ?? 0,
     last7DaysGmv: toNum(ordersLast7Agg._sum.totalAmount),
   }
+}
+
+const getAdminStatsCached = unstable_cache(
+  getAdminStatsUncached,
+  ["admin-stats"],
+  { revalidate: 60, tags: ["admin-stats"] }
+)
+
+/** Cached 60s for admin overview. */
+export async function getAdminStats(): Promise<AdminStats> {
+  return getAdminStatsCached()
 }

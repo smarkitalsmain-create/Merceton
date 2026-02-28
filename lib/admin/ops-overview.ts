@@ -20,36 +20,26 @@ export async function getOpsOverview(): Promise<OpsOverviewResult> {
   let merchantsOnHold = 0
   let kycPending = 0
   let domainsPending = 0
+  let payoutsAwaitingApproval = 0
+  let payoutsPendingExecution = 0
+
   try {
-    const [hold, kyc, domains] = await Promise.all([
-      prisma.merchant.count({
-        where: { accountStatus: "ON_HOLD" },
-      }),
+    const [hold, kyc, domains, pending, processing] = await prisma.$transaction([
+      prisma.merchant.count({ where: { accountStatus: "ON_HOLD" } }),
       prisma.merchant.count({
         where: { kycStatus: { in: ["PENDING", "SUBMITTED"] } },
       }),
-      prisma.merchant.count({
-        where: { domainStatus: "PENDING" },
-      }),
+      prisma.merchant.count({ where: { domainStatus: "PENDING" } }),
+      prisma.payoutBatch.count({ where: { status: "PENDING" } }),
+      prisma.payoutBatch.count({ where: { status: "PROCESSING" } }),
     ])
     merchantsOnHold = hold
     kycPending = kyc
     domainsPending = domains
-  } catch (e) {
-    warnings.push("Merchant counts failed")
-  }
-
-  let payoutsAwaitingApproval = 0
-  let payoutsPendingExecution = 0
-  try {
-    const [pending, processing] = await Promise.all([
-      prisma.payoutBatch.count({ where: { status: "PENDING" } }),
-      prisma.payoutBatch.count({ where: { status: "PROCESSING" } }),
-    ])
     payoutsAwaitingApproval = pending
     payoutsPendingExecution = processing
   } catch (e) {
-    warnings.push("PayoutBatch counts failed")
+    warnings.push("Ops overview counts failed")
   }
 
   return {

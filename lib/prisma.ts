@@ -1,26 +1,68 @@
 import { PrismaClient } from "@prisma/client"
 
-const globalForPrisma = globalThis as unknown as { 
+const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient
   prismaTx?: PrismaClient
+  prismaPoolerGuardLogged?: boolean
+}
+
+/**
+ * One-time runtime guard: ensure DATABASE_URL uses Neon pooler in production.
+ * Only logs host (never full URL). In production, throws if not using pooler.
+ */
+function assertPoolerUrlOnce(): void {
+  if (globalForPrisma.prismaPoolerGuardLogged) return
+  globalForPrisma.prismaPoolerGuardLogged = true
+
+  const url = process.env.DATABASE_URL
+  if (!url) return
+
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname
+    const usingPooler = host.includes("-pooler")
+
+    if (!usingPooler) {
+      const message = `[Prisma] DATABASE_URL must use Neon pooled connection (host should contain "-pooler"). Current host: ${host}`
+      if (process.env.NODE_ENV === "production") {
+        throw new Error(message)
+      }
+      console.error(message)
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("[Prisma]")) throw err
+    // URL parse failed - skip guard
+  }
 }
 
 /**
  * Prisma Client Singleton Pattern
- * 
+ *
  * CRITICAL: This ensures only ONE PrismaClient instance exists per process.
- * In development, Next.js hot-reloads modules which can create multiple instances.
- * In production, this prevents connection pool exhaustion.
- * 
- * Connection settings:
- * - Uses DATABASE_URL from environment (should use Neon pooler endpoint)
- * - For Neon pooler: URL should include ?pgbouncer=true&connection_limit=1
- * - Log level: ["error"] only to reduce noise
+ * Runtime MUST use DATABASE_URL (Neon pooled). Migrations/Studio use DIRECT_URL via schema.
+ *
+ * - DATABASE_URL: Neon pooled endpoint (host contains "-pooler") — used by app runtime
+ * - DIRECT_URL: Non-pooled — used only by Prisma CLI (migrate, studio)
  */
 export const prisma =
   globalForPrisma.prisma ??
+  (() => {
+    assertPoolerUrlOnce()
+    return new PrismaClient({
+      log: ["error"],
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL,
+        },
+      },
+    })
+  })()
+
+// Transaction client: also uses pooled DATABASE_URL (no DIRECT_URL in runtime)
+export const prismaTx =
+  globalForPrisma.prismaTx ??
   new PrismaClient({
-    log: ["error"], // Error logs only
+    log: ["error"],
     datasources: {
       db: {
         url: process.env.DATABASE_URL,
@@ -28,18 +70,8 @@ export const prisma =
     },
   })
 
-// Transaction Prisma client (uses DIRECT_URL for heavy/long transactions)
-// Only use this for onboarding and admin operations that need longer transactions
-export const prismaTx =
-  globalForPrisma.prismaTx ??
-  new PrismaClient({
-    log: ["error"], // Error logs only
-    datasources: {
-      db: {
-        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
-      },
-    },
-  })
+// For query duration logging in dev: set Prisma log to ["query"] in datasource or use
+// PRISMA_LOG_QUERY_DURATION=true with a custom logger (see Prisma docs).
 
 // Store in global to prevent multiple instances (works in both dev and production)
 // This is critical for preventing connection pool exhaustion

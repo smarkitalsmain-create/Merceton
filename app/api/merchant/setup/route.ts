@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     }
 
     // Create merchant + storefront + default home page + fee config + link user in ONE transaction (DB-only)
-    // Use prismaTx (DIRECT_URL) for this heavy onboarding transaction
+    // Use prismaTx for atomic onboarding transaction (same pooled connection as prisma)
     console.time("TX:merchant/setup:POST")
     let queryCount = 0
     const result = await prismaTx.$transaction(async (tx) => {

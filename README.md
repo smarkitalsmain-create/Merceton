@@ -467,11 +467,17 @@ npx prisma migrate deploy
    - **Razorpay**: Configure webhook URL to `https://yourdomain.com/api/webhooks/razorpay`
    - **Admin Access**: Add your Clerk user ID to `ADMIN_USER_IDS` in Vercel environment variables
 
+### Vercel / Neon env guidance
+
+- **DATABASE_URL** must be the **Neon pooled** connection string (host contains `-pooler`). This is used by the app at runtime; using the non-pooled URL in production can exhaust connections.
+- **DIRECT_URL** must be the **non-pooled** (direct) connection string. Used only by Prisma CLI for migrations and Studio, not by the app.
+- After changing any of these in Vercel (or elsewhere), **redeploy** so the new values are picked up.
+
 ### Vercel Postgres Setup
 
 1. In Vercel project, go to Storage tab
 2. Click "Create Database" > "Postgres"
-3. Copy the connection string to `DATABASE_URL`
+3. Copy the **pooled** connection string to `DATABASE_URL` and the **direct** connection string to `DIRECT_URL`
 4. Run migrations: `npx prisma migrate deploy`
 
 ## Project Structure
