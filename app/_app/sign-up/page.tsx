@@ -32,7 +32,7 @@ export default function AppSignUpPage() {
         options: {
           emailRedirectTo:
             typeof window !== "undefined"
-              ? `${window.location.origin}/auth/callback`
+              ? `${window.location.origin}/auth/callback?next=${encodeURIComponent("/onboarding/create-store")}`
               : undefined,
         },
       })

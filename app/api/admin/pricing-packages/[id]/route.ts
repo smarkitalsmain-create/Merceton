@@ -3,6 +3,7 @@ import { requireAdminForApi } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { logAdminAction } from "@/lib/admin/audit"
 import { z } from "zod"
+import type { Prisma } from "@prisma/client"
 
 export const runtime = "nodejs"
 
@@ -129,13 +130,13 @@ export async function PATCH(
         },
         update: {
           enabled: f.enabled,
-          valueJson: f.enabled ? (f.valueJson ?? undefined) : undefined,
+          valueJson: f.enabled ? ((f.valueJson ?? undefined) as Prisma.InputJsonValue | undefined) : undefined,
         },
         create: {
           pricingPackageId: id,
           featureId: f.featureId,
           enabled: f.enabled,
-          valueJson: f.enabled ? (f.valueJson ?? undefined) : undefined,
+          valueJson: f.enabled ? ((f.valueJson ?? undefined) as Prisma.InputJsonValue | undefined) : undefined,
         },
       })
     }

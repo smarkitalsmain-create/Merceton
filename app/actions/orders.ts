@@ -1,487 +1,214 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
-import { prisma } from "@/lib/prisma"
-import { Decimal } from "@prisma/client/runtime/library"
-import { calculatePlatformFee, calculateNetPayable, getEffectiveFeeConfigForFees } from "@/lib/fees"
-import { createOrderSchema, type CreateOrderInput } from "@/lib/validations/order"
-import { logger } from "@/lib/logger"
 import { z } from "zod"
-import { validateCoupon, calculateDiscount } from "@/lib/coupons/validation"
-import { LedgerType } from "@prisma/client"
+import {
+  LedgerStatus,
+  LedgerType,
+  OrderStage,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+} from "@prisma/client"
+import { Decimal } from "@prisma/client/runtime/library"
+import { prisma } from "@/lib/prisma"
+import { createOrderSchema } from "@/lib/validations/order"
+import { generateOrderNumber } from "@/lib/order/generateOrderNumber"
+import { calculatePlatformFee, getEffectiveFeeConfigForFees } from "@/lib/fees"
+import { getServiceability } from "@/lib/logistics/service"
 
-export async function createOrder(input: unknown) {
-  // DEV-only: Log incoming request
-  if (process.env.NODE_ENV === "development") {
-    console.log("[createOrder] Received request:", {
-      hasInput: !!input,
-      inputKeys: input ? Object.keys(input as object) : [],
-    })
-  }
+export type CreateOrderResult =
+  | { success: true; order: { id: string; orderNumber: string } }
+  | { success: false; error: string }
 
+export async function createOrder(input: unknown): Promise<CreateOrderResult> {
   try {
-    // Validate input with Zod
-    const validatedInput = createOrderSchema.parse(input) as CreateOrderInput
+    const validated = createOrderSchema.parse(input)
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("[createOrder] Validation passed:", {
-        merchantId: validatedInput.merchantId,
-        storeSlug: validatedInput.storeSlug,
-        itemCount: validatedInput.items.length,
-        paymentMethod: validatedInput.paymentMethod,
-      })
-    }
-
-    logger.info("Order creation started", {
-      merchantId: validatedInput.merchantId,
-      itemCount: validatedInput.items.length,
-    })
-
-    // Validate customer email
-    const customerEmail = validatedInput.customerEmail?.trim() || "";
-    if (!customerEmail) {
-      return { success: false, error: "Customer email is required to place an order" };
-    }
-    
-    // Simple email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(customerEmail)) {
-      return { success: false, error: "Customer email is required to place an order" };
-    }
-
-    // Verify merchant exists and get merchant email
-    const merchant = await prisma.merchant.findUnique({
-      where: { id: validatedInput.merchantId, slug: validatedInput.storeSlug, isActive: true },
-      include: {
-        users: {
-          where: { role: "ADMIN" },
-          take: 1,
-          select: { email: true },
-        },
+    const merchant = await prisma.merchant.findFirst({
+      where: {
+        id: validated.merchantId,
+        slug: validated.storeSlug,
+        isActive: true,
       },
+      select: { id: true },
     })
 
     if (!merchant) {
-      return { success: false, error: "Merchant not found" }
+      return { success: false, error: "Store not found" }
     }
 
-    // Get merchant email from associated user account
-    const merchantEmail = merchant.users[0]?.email;
-    if (!merchantEmail || !merchantEmail.trim()) {
-      console.error("[order-creation] Merchant email missing for store", {
-        merchantId: merchant.id,
-        storeSlug: validatedInput.storeSlug,
-      });
-      return { success: false, error: "Merchant email missing for store" };
+    try {
+      const svc = await getServiceability("delhivery", { pincode: validated.pincode })
+      if (!svc.success) {
+        return {
+          success: false,
+          error: "Delivery temporarily unavailable at this pincode",
+        }
+      }
+      if (!svc.serviceable || svc.isEmbargoed) {
+        return {
+          success: false,
+          error: "Delivery not available at this pincode",
+        }
+      }
+    } catch {
+      return {
+        success: false,
+        error: "Unable to check delivery right now. Please try again.",
+      }
     }
 
-    // Fetch all products and validate
-    const productIds = validatedInput.items.map((item) => item.productId)
+    const productIds = validated.items.map((i) => i.productId)
     const products = await prisma.product.findMany({
       where: {
         id: { in: productIds },
         merchantId: merchant.id,
         isActive: true,
       },
+      include: {
+        images: { orderBy: { sortOrder: "asc" }, take: 1 },
+      },
     })
 
     if (products.length !== productIds.length) {
-      return { success: false, error: "Some products not found" }
+      return { success: false, error: "One or more products are unavailable" }
     }
 
-    // Validate stock and calculate totals
-    let totalAmountInPaise = 0
-    const orderItems: Array<{
-      productId: string
-      quantity: number
-      price: number
-    }> = []
+    const byId = new Map(products.map((p) => [p.id, p]))
 
-    for (const item of validatedInput.items) {
-      const product = products.find((p) => p.id === item.productId)
-      if (!product) {
-        return { success: false, error: `Product ${item.productId} not found` }
+    let grossPaise = 0
+    for (const line of validated.items) {
+      const p = byId.get(line.productId)
+      if (!p) {
+        return { success: false, error: "Invalid product in order" }
       }
-
-      if (product.stock < item.quantity) {
-        return {
-          success: false,
-          error: `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}`,
-        }
+      if (p.stock < line.quantity) {
+        return { success: false, error: `Insufficient stock for ${p.name}` }
       }
-
-      const itemTotal = product.price * item.quantity
-      totalAmountInPaise += itemTotal
-
-      orderItems.push({
-        productId: product.id,
-        quantity: item.quantity,
-        price: product.price, // Already in paise
-      })
+      grossPaise += p.price * line.quantity
     }
 
-    // Generate uniform order number (atomic, concurrency-safe)
-    if (process.env.NODE_ENV === "development") {
-      console.log("[createOrder] Generating order number...")
-    }
-    
-    const { generateOrderNumber } = await import("@/lib/order/generateOrderNumber");
-    let orderNumber: string;
-    try {
-      orderNumber = await generateOrderNumber(prisma);
-      if (process.env.NODE_ENV === "development") {
-        console.log("[createOrder] Order number generated:", orderNumber)
-      }
-    } catch (error: any) {
-      console.error("[createOrder] Failed to generate order number:", error)
-      logger.error("Order number generation failed", {
-        merchantId: validatedInput.merchantId,
-        error: error instanceof Error ? error.message : String(error),
-        code: error?.code,
-      })
-      
-      // Check for specific Prisma errors
-      if (error?.code === "P2021") {
-        // Table does not exist
-        console.error("[createOrder] CRITICAL: order_number_counters table missing!")
-        console.error("[createOrder] Run: npm run db:push")
-        return { 
-          success: false, 
-          error: "Database schema is out of sync. Please contact support or try again later." 
-        }
-      }
-      
-      if (error?.code === "P1001") {
-        // Database connection error
-        return { 
-          success: false, 
-          error: "Database connection failed. Please try again later." 
-        }
-      }
-      
-      return { success: false, error: "Failed to generate order number. Please try again." }
-    }
-
-    // Validate and apply coupon if provided.
-    // In this deployment, coupon tables are not provisioned; reject orders that try to use coupons.
-    let discountInInr = 0
-    let couponId: string | null = null
-    let couponCode: string | null = null
-
-    if (validatedInput.couponCode) {
-      return {
-        success: false,
-        error: "Coupons not available: database not provisioned",
-      }
-    }
-
-    // Calculate platform fee on PRE-DISCOUNT amount (grossAmount)
-    // This ensures platform fee is calculated on the original order value
     const feeConfig = await getEffectiveFeeConfigForFees(merchant.id)
-    const platformFeeInPaise = calculatePlatformFee(totalAmountInPaise, feeConfig)
-    
-    // Calculate net payable: grossAmount - discount - platformFee
-    const grossAmountInInr = totalAmountInPaise / 100
-    const discountInPaise = Math.round(discountInInr * 100)
-    const amountAfterDiscountInPaise = totalAmountInPaise - discountInPaise
-    const netPayableInPaise = amountAfterDiscountInPaise - platformFeeInPaise
-    
-    const platformFeeInInr = platformFeeInPaise / 100
-    const netPayableInInr = netPayableInPaise / 100
+    const platformFeePaise = calculatePlatformFee(grossPaise, feeConfig)
+    const netPaise = Math.max(0, grossPaise - platformFeePaise)
 
-    // Determine payment method (UPI maps to RAZORPAY for online payments)
-    const paymentMethod = validatedInput.paymentMethod === "UPI" ? "RAZORPAY" : validatedInput.paymentMethod
+    const grossAmount = new Decimal((grossPaise / 100).toFixed(2))
+    const platformFee = new Decimal((platformFeePaise / 100).toFixed(2))
+    const netPayable = new Decimal((netPaise / 100).toFixed(2))
 
-    // Prepare stock updates (batch) - do this BEFORE transaction
-    const stockUpdates = orderItems.map((item) => ({
-      productId: item.productId,
-      quantity: item.quantity,
-    }))
+    const orderNumber = await generateOrderNumber(prisma)
 
-    // Create order in transaction (DB-only, fast)
-    // Must be interactive because ledger entries need orderId from order creation
-    if (process.env.NODE_ENV === "development") {
-      console.log("[createOrder] Starting transaction to create order...")
+    const shippingAddress = {
+      pincode: validated.pincode,
+      addressLine: validated.customerAddress,
     }
-    
-    console.time("TX:orders:createOrder")
-    let queryCount = 0
-    
-    let order;
-    try {
-      order = await prisma.$transaction(async (tx) => {
-      queryCount++
-      // Create order
-      const newOrder = await tx.order.create({
+
+    const order = await prisma.$transaction(async (tx) => {
+      for (const line of validated.items) {
+        const updated = await tx.product.updateMany({
+          where: {
+            id: line.productId,
+            merchantId: merchant.id,
+            stock: { gte: line.quantity },
+          },
+          data: { stock: { decrement: line.quantity } },
+        })
+        if (updated.count !== 1) {
+          throw new Error(`Insufficient stock for a product`)
+        }
+      }
+
+      const created = await tx.order.create({
         data: {
           merchantId: merchant.id,
           orderNumber,
-          customerName: validatedInput.customerName,
-          customerEmail: customerEmail,
-          customerPhone: validatedInput.customerPhone,
-          customerAddress: validatedInput.customerAddress,
-          status: paymentMethod === "COD" ? "PLACED" : "PENDING",
-          grossAmount: new Decimal(grossAmountInInr),
-          discount: new Decimal(discountInInr),
-          platformFee: new Decimal(platformFeeInInr),
-          netPayable: new Decimal(netPayableInInr),
+          customerName: validated.customerName,
+          customerEmail: validated.customerEmail,
+          customerPhone: validated.customerPhone,
+          customerAddress: validated.customerAddress,
+          shippingAddress,
+          stage: OrderStage.NEW,
+          status: OrderStatus.PLACED,
+          paymentStatus: PaymentStatus.PENDING,
+          subtotal: grossAmount,
+          tax: new Decimal(0),
+          shippingFee: new Decimal(0),
+          discount: new Decimal(0),
+          totalAmount: grossAmount,
+          grossAmount,
+          platformFee,
+          netPayable,
           items: {
-            create: orderItems,
+            create: validated.items.map((line) => {
+              const p = byId.get(line.productId)!
+              const img = p.images[0]
+              return {
+                productId: p.id,
+                productName: p.name,
+                sku: p.sku,
+                imageUrl: img?.url ?? null,
+                quantity: line.quantity,
+                price: p.price,
+              }
+            }),
           },
           payment: {
             create: {
               merchantId: merchant.id,
-              paymentMethod: paymentMethod,
-              status: paymentMethod === "COD" ? "PENDING" : "CREATED",
-              amount: new Decimal(netPayableInInr), // Payment amount is after discount
+              paymentMethod: validated.paymentMethod as PaymentMethod,
+              status: PaymentStatus.PENDING,
+              amount: grossAmount,
             },
           },
-        },
-        include: {
-          items: {
-            include: {
-              product: true,
-            },
-          },
-          payment: true,
         },
       })
-
-      // Batch stock updates (parallel, but still in same transaction)
-      queryCount += stockUpdates.length
-      await Promise.all(
-        stockUpdates.map((update) =>
-          tx.product.update({
-            where: { id: update.productId },
-            data: {
-              stock: {
-                decrement: update.quantity,
-              },
-            },
-          })
-        )
-      )
-
-      // Create ledger entries (depends on newOrder.id)
-      queryCount++
-      const ledgerEntries: {
-        merchantId: string
-        orderId: string
-        type: LedgerType
-        amount: Decimal
-        description: string
-        status: "PENDING"
-      }[] = [
-        {
-          merchantId: merchant.id,
-          orderId: newOrder.id,
-          type: LedgerType.GROSS_ORDER_VALUE,
-          amount: new Decimal(grossAmountInInr), // Positive (credit)
-          description: `Gross order value for ${orderNumber}`,
-          status: "PENDING",
-        },
-      ]
-
-      // Add discount ledger entry if coupon was applied
-      if (discountInInr > 0 && couponCode) {
-        // Map coupon discount to a negative PLATFORM_FEE entry so we don't rely on a custom enum.
-        ledgerEntries.push({
-          merchantId: merchant.id,
-          orderId: newOrder.id,
-          type: LedgerType.PLATFORM_FEE,
-          amount: new Decimal(discountInInr * -1), // Negative (debit)
-          description: `Coupon discount (${couponCode}) for ${orderNumber}`,
-          status: "PENDING" as const,
-        })
-      }
-
-      ledgerEntries.push(
-        {
-          merchantId: merchant.id,
-          orderId: newOrder.id,
-          type: LedgerType.PLATFORM_FEE,
-          amount: new Decimal(platformFeeInInr * -1), // Negative (debit)
-          description: `Platform fee for ${orderNumber}`,
-          status: "PENDING" as const,
-        },
-        {
-          merchantId: merchant.id,
-          orderId: newOrder.id,
-          type: LedgerType.ORDER_PAYOUT,
-          amount: new Decimal(netPayableInInr), // Positive (credit to merchant)
-          description: `Net payable for ${orderNumber}`,
-          status: "PENDING" as const,
-        }
-      )
 
       await tx.ledgerEntry.createMany({
-        data: ledgerEntries,
+        data: [
+          {
+            merchantId: merchant.id,
+            orderId: created.id,
+            type: LedgerType.GROSS_ORDER_VALUE,
+            amount: grossAmount,
+            description: `Gross order value for ${orderNumber}`,
+            status: LedgerStatus.PENDING,
+          },
+          {
+            merchantId: merchant.id,
+            orderId: created.id,
+            type: LedgerType.PLATFORM_FEE,
+            amount: platformFee,
+            description: `Platform fee for ${orderNumber}`,
+            status: LedgerStatus.PENDING,
+          },
+          {
+            merchantId: merchant.id,
+            orderId: created.id,
+            type: LedgerType.ORDER_PAYOUT,
+            amount: netPayable,
+            description: `Net payout for ${orderNumber}`,
+            status: LedgerStatus.PENDING,
+          },
+        ],
       })
 
-        return newOrder
-      }, { timeout: 15000, maxWait: 15000 })
-      console.timeEnd(`TX:orders:createOrder (${queryCount} queries)`)
-      
-      if (process.env.NODE_ENV === "development") {
-        console.log("[createOrder] Order created successfully:", {
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          merchantId: order.merchantId,
-        })
-      }
-    } catch (txError) {
-      console.error("[createOrder] Transaction failed:", txError)
-      logger.error("Order creation transaction failed", {
-        merchantId: validatedInput.merchantId,
-        orderNumber,
-        error: txError instanceof Error ? txError.message : String(txError),
-      })
-      return { success: false, error: "Failed to create order. Please try again." }
-    }
-
-    // Validate stock after transaction (outside transaction)
-    const updatedProducts = await prisma.product.findMany({
-      where: {
-        id: { in: stockUpdates.map((u) => u.productId) },
-      },
-      select: {
-        id: true,
-        name: true,
-        stock: true,
-      },
+      return created
     })
 
-    // Check for negative stock (should not happen, but safety check)
-    for (const product of updatedProducts) {
-      if (product.stock < 0) {
-        // This is a critical error - rollback would be ideal but we're outside transaction
-        // Log and alert - in production you might want to implement compensation
-        logger.error("Stock went negative after order creation", {
-          productId: product.id,
-          productName: product.name,
-          stock: product.stock,
-          orderId: order.id,
-        })
-        // Note: In a real system, you might want to implement a compensation transaction
-        // or alert system here
-      }
+    return {
+      success: true,
+      order: { id: order.id, orderNumber: order.orderNumber },
     }
-
-    revalidatePath(`/s/${validatedInput.storeSlug}`)
-
-    // Email trigger A: Order confirmation to buyer/customer (non-blocking)
-    // Send order confirmation email to customer
-    try {
-      const { sendOrderConfirmationEmailToCustomer } = await import("@/lib/email/notifications");
-      const items = order.items.map((item) => ({
-        name: item.product?.name || item.productName || "Product",
-        qty: item.quantity,
-        price: item.price / 100, // Convert from paise to INR
-      }));
-
-      await sendOrderConfirmationEmailToCustomer({
-        to: customerEmail,
-        customerName: order.customerName,
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        orderDate: order.createdAt.toISOString(),
-        items,
-        totalAmount: order.grossAmount.toNumber(),
-        currency: "INR",
-        storeName: merchant.displayName,
-      });
-
-      console.log(`[email][customer] orderId=${order.orderNumber} to=${customerEmail}`);
-    } catch (emailError) {
-      // Log but don't fail order creation
-      console.error(`[email][customer] Failed to send order confirmation: orderId=${order.orderNumber} to=${customerEmail}`, emailError);
-    }
-
-    // Email trigger B: New order notification to merchant (non-blocking)
-    try {
-      const { sendNewOrderEmailToMerchant } = await import("@/lib/email/notifications");
-      const items = order.items.map((item) => ({
-        name: item.product?.name || item.productName || "Product",
-        qty: item.quantity,
-        price: item.price / 100, // Convert from paise to INR
-      }));
-
-      await sendNewOrderEmailToMerchant({
-        to: merchantEmail,
-        merchantName: merchant.displayName,
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        orderDate: order.createdAt.toISOString(),
-        customerName: order.customerName,
-        customerEmail: customerEmail,
-        customerPhone: order.customerPhone || undefined,
-        items,
-        totalAmount: order.grossAmount.toNumber(),
-        currency: "INR",
-        paymentMethod: order.payment?.paymentMethod || undefined,
-        adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/orders/${order.id}`,
-      });
-
-      console.log(`[email][merchant] orderId=${order.orderNumber} to=${merchantEmail}`);
-    } catch (emailError) {
-      // Log but don't fail order creation
-      console.error(`[email][merchant] Failed to send new order notification: orderId=${order.orderNumber} to=${merchantEmail}`, emailError);
-    }
-
-    // Email trigger B: High value order internal alert to ops (non-blocking)
-    // Send internal alert if order amount exceeds threshold (threshold is in paise)
-    const highValueThresholdPaise = Number(process.env.HIGH_VALUE_ORDER_THRESHOLD || "50000");
-    const orderAmountInPaise = order.grossAmount.toNumber() * 100; // Convert INR to paise
-    if (orderAmountInPaise >= highValueThresholdPaise) {
-      try {
-        const { sendOpsHighValueOrderAlert } = await import("@/lib/email/notifications");
-        const opsEmail = process.env.OPS_ALERT_TO || "ops@merceton.com";
-        
-        await sendOpsHighValueOrderAlert({
-          orderId: order.id, // Internal ID for tracking
-          orderNumber: order.orderNumber, // Human-readable for display
-          storeName: merchant.displayName,
-          amount: order.grossAmount.toNumber(),
-          currency: "INR",
-          customerEmail: customerEmail || undefined,
-          paymentMode: order.payment?.paymentMethod || undefined,
-          createdAt: order.createdAt.toISOString(),
-          adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/admin/orders/${order.id}`,
-        });
-
-        console.log(`[email][ops-high-value] to=${opsEmail} orderNumber=${order.orderNumber}`);
-      } catch (emailError) {
-        console.error("[email][ops-high-value] Failed to send high value order alert:", emailError);
-      }
-    }
-
-    if (process.env.NODE_ENV === "development") {
-      console.log("[createOrder] Order creation completed successfully:", {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-      })
-    }
-
-    return { success: true, order }
   } catch (error) {
-    console.error("[createOrder] Fatal error:", error)
-    logger.error("Order creation failed", {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    })
-    
-    // Return user-friendly error message
     if (error instanceof z.ZodError) {
-      return { 
-        success: false, 
-        error: `Validation failed: ${error.errors.map(e => e.message).join(", ")}` 
-      }
+      const msg = error.errors.map((e) => e.message).join("; ")
+      return { success: false, error: msg || "Validation failed" }
     }
-    
-    if (error instanceof Error) {
-      return { success: false, error: error.message }
+    console.error("[createOrder]", error)
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to create order. Please try again.",
     }
-    
-    return { success: false, error: "Failed to create order. Please try again." }
   }
 }

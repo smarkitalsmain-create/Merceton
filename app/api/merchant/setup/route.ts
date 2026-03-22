@@ -1,195 +1,196 @@
+import { NextRequest, NextResponse } from "next/server"
+import { Prisma } from "@prisma/client"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { prisma } from "@/lib/prisma"
+import { isDbDownError } from "@/lib/db-error"
+
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
-import { NextResponse } from "next/server";
-import { prisma, prismaTx } from "@/lib/prisma";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
-function slugify(input: string) {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ error: message, success: false }, { status })
 }
 
-export async function POST(req: Request) {
+function jsonOk<T extends Record<string, unknown>>(data: T, status = 200) {
+  return NextResponse.json({ success: true, ...data }, { status })
+}
+
+/**
+ * GET — setup status for the signed-in user (has merchant / basic info).
+ */
+export async function GET() {
   try {
     const supabase = createSupabaseServerClient()
     const {
       data: { user },
-      error,
+      error: authError,
     } = await supabase.auth.getUser()
 
-    if (error || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (authError || !user) {
+      return jsonError("Unauthorized", 401)
     }
 
-    const userId = user.id;
-
-    const body = await req.json().catch(() => null);
-    const displayNameRaw = body?.displayName ?? body?.storeName ?? "";
-    const slugRaw = body?.slug ?? body?.storeSlug ?? "";
-
-    const displayName = String(displayNameRaw).trim();
-    const slug = slugify(String(slugRaw));
-
-    if (!displayName) {
-      return NextResponse.json({ error: "Store name is required" }, { status: 400 });
-    }
-    if (!slug || slug.length < 3) {
-      return NextResponse.json(
-        { error: "Store URL is required (min 3 chars)" },
-        { status: 400 }
-      );
-    }
-
-    // Make sure DB user exists (your requireUser does this too, but we keep it safe here)
     const dbUser = await prisma.user.findUnique({
-      where: { authUserId: userId },
-      select: { id: true, merchantId: true },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: "User record not found in DB. Visit /onboarding/create-store again." },
-        { status: 400 }
-      );
-    }
-
-    // If already has a merchant, return it
-    if (dbUser.merchantId) {
-      const existing = await prisma.merchant.findUnique({
-        where: { id: dbUser.merchantId },
-      });
-      return NextResponse.json({ merchant: existing, alreadySetup: true }, { status: 200 });
-    }
-
-    // Slug uniqueness check (BEFORE transaction)
-    const slugTaken = await prisma.merchant.findUnique({ where: { slug } });
-    if (slugTaken) {
-      return NextResponse.json(
-        { error: "This Store URL is already taken. Try a different one." },
-        { status: 409 }
-      );
-    }
-
-    // Get default pricing package (BEFORE transaction)
-    const platformSettings = await prisma.platformSettings.findUnique({
-      where: { id: "singleton" },
-      select: { defaultPricingPackageId: true },
+      where: { authUserId: user.id },
+      include: {
+        merchant: {
+          select: {
+            id: true,
+            slug: true,
+            displayName: true,
+          },
+        },
+      },
     })
 
-    // Prepare layout JSON (BEFORE transaction - no computation inside)
-    const defaultLayoutJson = {
-      sections: [
-        {
-          id: "hero-1",
-          type: "hero",
-          settings: {
-            headline: `Welcome to ${displayName}`,
-            subheadline: "Browse our latest products and offers.",
-            ctaText: "Shop Now",
-            ctaLink: `/s/${slug}`,
-          },
-        },
-        {
-          id: "products-1",
-          type: "productGrid",
-          settings: {
-            title: "Featured Products",
-            collection: "featured",
-            limit: 8,
-          },
-        },
-        {
-          id: "footer-1",
-          type: "footer",
-          settings: {
-            brandName: displayName,
-            links: [],
-          },
-        },
-      ],
+    if (!dbUser) {
+      return jsonOk({
+        setupComplete: false,
+        hasMerchant: false,
+        merchant: null,
+      })
     }
 
-    // Create merchant + storefront + default home page + fee config + link user in ONE transaction (DB-only)
-    // Use prismaTx for atomic onboarding transaction (same pooled connection as prisma)
-    console.time("TX:merchant/setup:POST")
-    let queryCount = 0
-    const result = await prismaTx.$transaction(async (tx) => {
-      queryCount++
+    return jsonOk({
+      setupComplete: Boolean(dbUser.merchant),
+      hasMerchant: Boolean(dbUser.merchant),
+      merchant: dbUser.merchant,
+    })
+  } catch (e: unknown) {
+    if (isDbDownError(e)) {
+      return jsonError("Service temporarily unavailable", 503)
+    }
+    console.error("[merchant/setup GET]", e)
+    return jsonError("Failed to load setup status", 500)
+  }
+}
+
+type SetupBody = {
+  storeName?: string
+  storeSlug?: string
+  description?: string
+}
+
+/**
+ * POST — create merchant + link user (onboarding store creation).
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const supabase = createSupabaseServerClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return jsonError("Unauthorized", 401)
+    }
+
+    let body: SetupBody
+    try {
+      body = (await req.json()) as SetupBody
+    } catch {
+      return jsonError("Invalid JSON body", 400)
+    }
+
+    const storeName = typeof body.storeName === "string" ? body.storeName.trim() : ""
+    const rawSlug = typeof body.storeSlug === "string" ? body.storeSlug.trim() : ""
+    const description =
+      typeof body.description === "string" ? body.description.trim() : undefined
+
+    if (!storeName || storeName.length < 2) {
+      return jsonError("Store name is required (at least 2 characters)", 400)
+    }
+
+    if (!rawSlug || !SLUG_REGEX.test(rawSlug)) {
+      return jsonError(
+        "Store URL must be lowercase letters, numbers, and hyphens only",
+        400
+      )
+    }
+
+    const email = user.email ?? `${user.id}@no-email.local`
+    const name =
+      (user.user_metadata?.name as string | undefined) ||
+      (user.user_metadata?.full_name as string | undefined) ||
+      null
+
+    const dbUser = await prisma.user.upsert({
+      where: { authUserId: user.id },
+      update: { email, name },
+      create: {
+        authUserId: user.id,
+        email,
+        name,
+        role: "ADMIN",
+      },
+      include: { merchant: true },
+    })
+
+    if (dbUser.merchantId && dbUser.merchant) {
+      return jsonError("Store is already set up for this account", 409)
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
       const merchant = await tx.merchant.create({
         data: {
-          displayName,
-          slug,
-          isActive: true,
+          slug: rawSlug,
+          displayName: storeName,
           storefront: {
             create: {
+              mode: "THEME",
               theme: "minimal",
             },
           },
-          pages: {
+          storeSettings: {
             create: {
-              slug: "home",
-              title: `${displayName} Home`,
-              layoutJson: defaultLayoutJson,
-              isPublished: true,
+              storeName,
+              description: description || null,
             },
           },
-          feeConfig: {
+          onboarding: {
             create: {
-              pricingPackageId: platformSettings?.defaultPricingPackageId || null,
+              onboardingStatus: "NOT_STARTED",
+              profileCompletionPercent: 0,
+              gstStatus: "NOT_REGISTERED",
+              storeDisplayName: storeName,
             },
           },
         },
-      });
+      })
 
-      queryCount++
-      // Remove include to reduce query overhead - we can fetch separately if needed
-      const user = await tx.user.update({
-        where: { authUserId: userId },
-        data: {
-          merchantId: merchant.id,
-          role: "ADMIN",
-        },
-      });
+      await tx.user.update({
+        where: { id: dbUser.id },
+        data: { merchantId: merchant.id },
+      })
 
-      return { merchant, user };
-    }, { timeout: 20000, maxWait: 20000 });
-    console.timeEnd(`TX:merchant/setup:POST (${queryCount} queries)`)
-    
-    // Fetch user with merchant relation AFTER transaction if needed
-    const userWithMerchant = await prisma.user.findUnique({
-      where: { authUserId: userId },
-      include: { merchant: true },
-    });
+      return merchant
+    })
 
-    // Email trigger: New merchant signup alert (non-blocking)
-    try {
-      const { sendOpsNewMerchantSignupAlert } = await import("@/lib/email/notifications");
-      const userEmail = userWithMerchant?.email || result.user?.email || `${userId}@no-email.local`;
-      await sendOpsNewMerchantSignupAlert({
-        merchantName: result.merchant.displayName,
-        merchantEmail: userEmail,
-        createdAt: result.merchant.createdAt.toISOString(),
-        adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/admin/merchants/${result.merchant.id}`,
-      });
-    } catch (emailError) {
-      console.error("[email] Failed to send new merchant signup alert:", emailError);
+    return jsonOk({
+      merchant: {
+        id: result.id,
+        slug: result.slug,
+        displayName: result.displayName,
+      },
+    })
+  } catch (e: unknown) {
+    if (isDbDownError(e)) {
+      return jsonError("Service temporarily unavailable", 503)
     }
-    
-    return NextResponse.json(
-      { merchant: result.merchant, user: userWithMerchant || result.user },
-      { status: 201 }
-    );
-
-  } catch (err: any) {
-    console.error("POST /api/merchant/setup failed:", err);
-
-    // Prisma common unique errors etc.
-    const message =
-      typeof err?.message === "string" ? err.message : "Failed to create store";
-
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === "P2002") {
+        const target = (e.meta?.target as string[] | undefined)?.join(", ")
+        if (target?.includes("slug")) {
+          return jsonError("This store URL is already taken. Try another.", 409)
+        }
+        return jsonError("A unique field conflict occurred", 409)
+      }
+    }
+    console.error("[merchant/setup POST]", e)
+    return jsonError("Failed to create store", 500)
   }
 }

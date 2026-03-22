@@ -273,7 +273,12 @@ interface SectionSettingsEditorProps {
 function SectionSettingsEditor({ section, onChange }: SectionSettingsEditorProps) {
   switch (section.type) {
     case "hero": {
-      const settings = section.settings as Extract<StorefrontSection, { type: "hero" }>["settings"]
+      const settings = section.settings as {
+        headline: string
+        subheadline?: string
+        ctaText?: string
+        ctaLink?: string
+      }
       return (
         <div className="space-y-4">
           <div className="space-y-2">
@@ -308,7 +313,7 @@ function SectionSettingsEditor({ section, onChange }: SectionSettingsEditorProps
       )
     }
     case "text": {
-      const settings = section.settings as Extract<StorefrontSection, { type: "text" }>["settings"]
+      const settings = section.settings as { title: string; body: string }
       return (
         <div className="space-y-4">
           <div className="space-y-2">
@@ -329,10 +334,11 @@ function SectionSettingsEditor({ section, onChange }: SectionSettingsEditorProps
       )
     }
     case "productGrid": {
-      const settings = section.settings as Extract<
-        StorefrontSection,
-        { type: "productGrid" }
-      >["settings"]
+      const settings = section.settings as {
+        title: string
+        collection: "all" | "featured"
+        limit: number
+      }
       return (
         <div className="space-y-4">
           <div className="space-y-2">
@@ -375,7 +381,7 @@ function SectionSettingsEditor({ section, onChange }: SectionSettingsEditorProps
       )
     }
     case "banner": {
-      const settings = section.settings as Extract<StorefrontSection, { type: "banner" }>["settings"]
+      const settings = section.settings as { text: string; link?: string }
       return (
         <div className="space-y-4">
           <div className="space-y-2">

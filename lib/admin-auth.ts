@@ -1,35 +1,68 @@
-import { redirect } from "next/navigation"
 import { NextResponse } from "next/server"
-import { createSupabaseAdminServerReadonlyClient } from "@/lib/supabase/admin-server-readonly"
-import { isEmailInAllowlist } from "@/lib/admin-allowlist"
-import { prisma } from "@/lib/prisma"
+import { redirect } from "next/navigation"
+import { createSupabaseServerReadonlyClient } from "@/lib/supabase/server-readonly"
 
-/**
- * Check if the current user is a super admin (email-based)
- */
-export async function isSuperAdmin(): Promise<boolean> {
-  const supabase = createSupabaseAdminServerReadonlyClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+function getAllowedAdminIds(): string[] {
+  return (process.env.ADMIN_USER_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 
-  if (!user?.email) {
-    return false
+function isAdminUser(userId: string): boolean {
+  const allow = getAllowedAdminIds()
+  if (allow.length === 0 && process.env.NODE_ENV === "development") {
+    console.warn(
+      "[admin-auth] ADMIN_USER_IDS is empty — allowing access in development only."
+    )
+    return true
   }
+  return allow.includes(userId)
+}
 
-  return isEmailInAllowlist(user.email)
+export type AdminActor = {
+  userId: string
+  email: string | null
+}
+
+/** Same gate as {@link requireSuperAdmin} — alias for admin pages that use the older name. */
+export async function requirePlatformAdmin(): Promise<void> {
+  await requireSuperAdmin()
+}
+
+/** @deprecated Use {@link requireSuperAdmin} — kept for older server actions. */
+export async function requireAdmin(): Promise<void> {
+  await requireSuperAdmin()
 }
 
 /**
- * Require super admin access - redirects to /dashboard if not super admin
- * Returns actor info for audit logging
+ * Returns admin identity if the current user is allowed; otherwise `null`.
+ * Used by server actions that accept either merchant or admin (e.g. tickets).
  */
-export async function requireSuperAdmin(): Promise<{
-  userId: string
-  email: string
-  name: string | null
-}> {
-  const supabase = createSupabaseAdminServerReadonlyClient()
+export async function getAdminIdentity(): Promise<AdminActor | null> {
+  const supabase = createSupabaseServerReadonlyClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+  if (!isAdminUser(user.id)) return null
+  return { userId: user.id, email: user.email ?? null }
+}
+
+/** For server actions that must run as admin only — throws on failure. */
+export async function getAdminActorForAction(): Promise<AdminActor> {
+  const admin = await getAdminIdentity()
+  if (!admin) {
+    throw new Error("Forbidden")
+  }
+  return admin
+}
+
+/**
+ * Server pages / layouts for `/_admin/*` — redirects if not allowed.
+ */
+export async function requireSuperAdmin(): Promise<{ email: string | null; userId: string }> {
+  const supabase = createSupabaseServerReadonlyClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -38,119 +71,29 @@ export async function requireSuperAdmin(): Promise<{
     redirect("/admin/sign-in")
   }
 
-  const isSuper = !!isEmailInAllowlist(user.email)
-
-  if (!isSuper) {
-    redirect("/dashboard")
+  if (!isAdminUser(user.id)) {
+    redirect("/")
   }
 
-  return {
-    userId: user.id,
-    email: user.email ?? "",
-    name: user.user_metadata?.name ?? user.user_metadata?.full_name ?? null,
-  }
+  return { email: user.email ?? null, userId: user.id }
 }
 
 /**
- * Require admin access (platform admin - email allowlist based)
- * Throws error with message "UNAUTHORIZED" or "FORBIDDEN" for API routes to catch
- * For page routes, use requireSuperAdmin() which redirects
- * Allows Supabase-authenticated users whose email is in allowlist even without a User row.
+ * API routes — returns JSON error responses instead of redirects.
  */
-export async function requireAdmin(): Promise<{
-  userId: string
-  email: string
-  name: string | null
-}> {
-  const supabase = createSupabaseAdminServerReadonlyClient()
+export async function requireAdminForApi(): Promise<AdminActor | NextResponse> {
+  const supabase = createSupabaseServerReadonlyClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   if (!user) {
-    const error = new Error("UNAUTHORIZED")
-    ;(error as any).status = 401
-    throw error
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const email = (user.email ?? "").trim().toLowerCase()
-  if (!email) {
-    const error = new Error("FORBIDDEN")
-    ;(error as any).status = 403
-    throw error
+  if (!isAdminUser(user.id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  // Allow if email is in super admin allowlist (works for Supabase-only admins)
-  if (isEmailInAllowlist(email)) {
-    return {
-      userId: user.id,
-      email: user.email ?? email,
-      name: user.user_metadata?.name ?? user.user_metadata?.full_name ?? null,
-    }
-  }
-
-  // Fallback: check User table (for backwards compatibility)
-  const dbUser = await prisma.user.findUnique({
-    where: { authUserId: user.id },
-    select: { email: true },
-  })
-  if (dbUser && isEmailInAllowlist(dbUser.email)) {
-    return {
-      userId: user.id,
-      email: user.email ?? dbUser.email ?? "",
-      name: user.user_metadata?.name ?? user.user_metadata?.full_name ?? null,
-    }
-  }
-
-  const error = new Error("FORBIDDEN")
-  ;(error as any).status = 403
-  throw error
+  return { userId: user.id, email: user.email ?? null }
 }
-
-/**
- * Alias for requireAdmin (platform admin)
- */
-export async function requirePlatformAdmin(): Promise<{
-  userId: string
-  email: string
-  name: string | null
-}> {
-  return requireAdmin()
-}
-
-/**
- * Get admin identity for audit logging
- * Returns null if not admin (non-throwing version)
- */
-export async function getAdminIdentity(): Promise<{
-  userId: string
-  email: string
-  name: string | null
-} | null> {
-  try {
-    return await requireAdmin()
-  } catch {
-    return null
-  }
-}
-
-/**
- * Require admin for API routes. Returns NextResponse (401/403) on auth failure so route can return it.
- * Response body includes error and errorCode ("UNAUTHORIZED" | "FORBIDDEN") for client handling.
- */
-export async function requireAdminForApi(): Promise<
-  { userId: string; email: string; name: string | null } | NextResponse
-> {
-  try {
-    return await requireAdmin()
-  } catch (e: unknown) {
-    const status = (e as { status?: number })?.status ?? 500
-    const message = e instanceof Error ? e.message : "Unauthorized"
-    const errorCode = status === 401 ? "UNAUTHORIZED" : status === 403 ? "FORBIDDEN" : "SERVER_ERROR"
-    return NextResponse.json({ error: message, errorCode }, { status })
-  }
-}
-
-// Type exports for better typing
-export type AdminUser = Awaited<ReturnType<typeof requireAdmin>>
-export type SuperAdminUser = Awaited<ReturnType<typeof requireSuperAdmin>>

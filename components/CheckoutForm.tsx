@@ -1,608 +1,343 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import Image from "next/image"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useCart } from "@/hooks/use-cart"
 import { useToast } from "@/hooks/use-toast"
-import { formatCurrency } from "@/lib/utils/currency"
-import { createOrder } from "@/app/actions/orders"
-import Image from "next/image"
-import { Trash2 } from "lucide-react"
-import Script from "next/script"
-
-const checkoutSchema = z.object({
-  customerName: z.string().min(1, "Name is required"),
-  customerEmail: z.string().min(1, "Email is required").email("Invalid email format"),
-  customerPhone: z.string().min(10, "Phone number is required").max(15),
-  customerAddress: z.string().min(1, "Address is required"),
-  city: z.string().min(1, "City is required"),
-  state: z.string().min(1, "State is required"),
-  pincode: z.string().min(6, "Pincode must be 6 digits").max(6),
-  paymentMethod: z.enum(["COD", "UPI"], {
-    required_error: "Please select a payment method",
-  }),
-  couponCode: z.string().optional().nullable(),
-})
-
-type CheckoutFormData = z.infer<typeof checkoutSchema>
+import {
+  checkPincodeServiceability,
+  type ServiceabilityResultClient,
+  type ServiceabilityStatus,
+} from "@/lib/frontend/logistics"
+import { cn } from "@/lib/utils"
 
 interface CheckoutFormProps {
   storeSlug: string
   merchantId: string
 }
 
-declare global {
-  interface Window {
-    Razorpay: any
-  }
+function statusBlocksCheckout(s: ServiceabilityStatus | null): boolean {
+  if (s === null) return true
+  if (s === "idle" || s === "checking") return true
+  return s !== "serviceable"
 }
 
 export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
   const router = useRouter()
-  const { cart, removeFromCart, updateQuantity, getTotalPrice, clearCart, isLoaded } = useCart(storeSlug)
   const { toast } = useToast()
-  const [isPending, startTransition] = useTransition()
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false)
-  const [couponCode, setCouponCode] = useState("")
-  const [appliedCoupon, setAppliedCoupon] = useState<{
-    code: string
-    discount: number
-  } | null>(null)
-  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false)
+  const { cart, isLoaded, updateQuantity, removeFromCart, getTotalPrice, clearCart } =
+    useCart(storeSlug)
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useForm<CheckoutFormData>({
-    resolver: zodResolver(checkoutSchema),
-    defaultValues: {
-      paymentMethod: "COD",
-    },
-  })
+  const [customerName, setCustomerName] = useState("")
+  const [customerEmail, setCustomerEmail] = useState("")
+  const [customerPhone, setCustomerPhone] = useState("")
+  const [customerAddress, setCustomerAddress] = useState("")
+  const [pincode, setPincode] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState<"COD" | "UPI" | "RAZORPAY">("COD")
 
-  const paymentMethod = watch("paymentMethod")
+  const [pinStatus, setPinStatus] = useState<ServiceabilityStatus | null>(null)
+  const [pinMessage, setPinMessage] = useState<string | null>(null)
+  const [isCheckingPin, setIsCheckingPin] = useState(false)
 
-  if (!isLoaded) {
-    return <div>Loading cart...</div>
-  }
+  const [pending, startTransition] = useTransition()
 
-  if (cart.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-16 text-center">
-          <p className="text-lg text-muted-foreground mb-4">Your cart is empty</p>
-          <Button asChild>
-            <a href={`/s/${storeSlug}`}>Continue Shopping</a>
-          </Button>
-        </CardContent>
-      </Card>
-    )
-  }
+  const debouncedPin = pincode.replace(/\D/g, "").slice(0, 6)
 
-  const totalPrice = getTotalPrice()
-  const discountAmount = appliedCoupon ? appliedCoupon.discount : 0
-  const finalPrice = Math.max(0, totalPrice - discountAmount)
+  const runPinCheck = useCallback(async (code: string) => {
+    if (code.length !== 6) {
+      setPinStatus(null)
+      setPinMessage(null)
+      return
+    }
+    setIsCheckingPin(true)
+    setPinStatus("checking")
+    setPinMessage(null)
+    const result: ServiceabilityResultClient = await checkPincodeServiceability(code)
+    setPinStatus(result.status)
+    setPinMessage(result.message)
+    setIsCheckingPin(false)
+  }, [])
 
-  const handleApplyCoupon = async () => {
-    if (!couponCode.trim()) {
+  useEffect(() => {
+    if (debouncedPin.length !== 6) {
+      setPinStatus(null)
+      setPinMessage(null)
+      return
+    }
+    setPinStatus(null)
+    setPinMessage(null)
+    const t = setTimeout(() => {
+      void runPinCheck(debouncedPin)
+    }, 400)
+    return () => clearTimeout(t)
+  }, [debouncedPin, runPinCheck])
+
+  const checkoutBlocked = useMemo(
+    () => statusBlocksCheckout(pinStatus),
+    [pinStatus]
+  )
+
+  const handlePlaceOrder = () => {
+    if (!isLoaded || cart.length === 0) {
+      toast({ title: "Cart is empty", variant: "destructive" })
+      return
+    }
+    if (debouncedPin.length !== 6) {
       toast({
-        title: "Coupon code required",
-        description: "Please enter a coupon code",
+        title: "Pincode required",
+        description: "Enter a valid 6-digit pincode",
         variant: "destructive",
       })
       return
     }
-
-    setIsValidatingCoupon(true)
-    try {
-      const response = await fetch(`/api/coupons/validate?code=${encodeURIComponent(couponCode.trim())}&merchantId=${merchantId}&amount=${Math.round(totalPrice * 100)}`)
-      const data = await response.json()
-
-      if (!response.ok || !data.valid) {
-        toast({
-          title: "Invalid coupon",
-          description: data.error || "This coupon code is not valid",
-          variant: "destructive",
-        })
-        setAppliedCoupon(null)
-        return
-      }
-
-      setAppliedCoupon({
-        code: couponCode.trim().toUpperCase(),
-        discount: data.discountAmount || 0,
-      })
+    if (checkoutBlocked || isCheckingPin) {
       toast({
-        title: "Coupon applied",
-        description: `Discount of ₹${(data.discountAmount || 0).toFixed(2)} applied`,
-      })
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to validate coupon. Please try again.",
-        variant: "destructive",
-      })
-      setAppliedCoupon(null)
-    } finally {
-      setIsValidatingCoupon(false)
-    }
-  }
-
-  const handleRemoveCoupon = () => {
-    setCouponCode("")
-    setAppliedCoupon(null)
-  }
-
-  const handleRazorpayPayment = async (orderId: string) => {
-    if (!window.Razorpay) {
-      toast({
-        title: "Payment gateway not loaded",
-        description: "Please refresh the page and try again.",
+        title: "Delivery check",
+        description: pinMessage || "Confirm delivery to your pincode before placing the order.",
         variant: "destructive",
       })
       return
-    }
-
-    setIsProcessingPayment(true)
-
-    try {
-      // Create Razorpay order
-      const res = await fetch("/api/payments/create-razorpay-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Failed to create payment order")
-      }
-
-      const { razorpayOrderId, amount } = await res.json()
-
-      // Initialize Razorpay checkout
-      const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: amount,
-        currency: "INR",
-        name: "Merceton",
-        description: `Order payment`,
-        order_id: razorpayOrderId,
-        handler: async function (response: any) {
-          // Verify payment on server
-          const verifyRes = await fetch("/api/payments/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              orderId,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpaySignature: response.razorpay_signature,
-            }),
-          })
-
-          if (verifyRes.ok) {
-            clearCart()
-            toast({
-              title: "Payment successful!",
-              description: "Your order has been confirmed.",
-            })
-            router.push(`/s/${storeSlug}/order/${orderId}`)
-          } else {
-            const data = await verifyRes.json()
-            toast({
-              title: "Payment verification failed",
-              description: data.error || "Please contact support.",
-              variant: "destructive",
-            })
-          }
-        },
-        prefill: {
-          name: watch("customerName"),
-          contact: watch("customerPhone"),
-        },
-        theme: {
-          color: "#000000",
-        },
-        modal: {
-          ondismiss: function () {
-            setIsProcessingPayment(false)
-          },
-        },
-      }
-
-      const razorpay = new window.Razorpay(options)
-      razorpay.on("payment.failed", function (response: any) {
-        toast({
-          title: "Payment failed",
-          description: response.error.description || "Payment could not be completed.",
-          variant: "destructive",
-        })
-        setIsProcessingPayment(false)
-      })
-      razorpay.open()
-    } catch (error) {
-      console.error("Razorpay payment error:", error)
-      toast({
-        title: "Payment error",
-        description: error instanceof Error ? error.message : "Failed to process payment.",
-        variant: "destructive",
-      })
-      setIsProcessingPayment(false)
-    }
-  }
-
-  const onSubmit = (data: CheckoutFormData) => {
-    // DEV-only: Log form submission
-    if (process.env.NODE_ENV === "development") {
-      console.log("[CheckoutForm] Submitting order:", {
-        merchantId,
-        storeSlug,
-        itemCount: cart.length,
-        paymentMethod: data.paymentMethod,
-      })
     }
 
     startTransition(async () => {
       try {
-        const result = await createOrder({
-          merchantId,
-          storeSlug,
-          items: cart.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-          })),
-          customerName: data.customerName,
-          customerEmail: data.customerEmail,
-          customerPhone: data.customerPhone,
-          customerAddress: `${data.customerAddress}, ${data.city}, ${data.state} ${data.pincode}`,
-          paymentMethod: data.paymentMethod,
-          couponCode: appliedCoupon?.code || null,
+        const res = await fetch("/api/orders/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            merchantId,
+            storeSlug,
+            items: cart.map((c) => ({
+              productId: c.productId,
+              quantity: c.quantity,
+            })),
+            customerName,
+            customerEmail,
+            customerPhone,
+            customerAddress,
+            pincode: debouncedPin,
+            paymentMethod,
+          }),
         })
 
-        // DEV-only: Log result
-        if (process.env.NODE_ENV === "development") {
-          console.log("[CheckoutForm] Order creation result:", {
-            success: result.success,
-            hasOrder: !!result.order,
-            orderId: result.order?.id,
-            orderNumber: result.order?.orderNumber,
-            error: result.error,
-          })
+        const text = await res.text()
+        let data: { id?: string; orderNumber?: string; error?: string } = {}
+        try {
+          data = JSON.parse(text)
+        } catch {
+          /* ignore */
         }
 
-        // Validate response structure
-        if (!result || typeof result !== "object") {
-          console.error("[CheckoutForm] Invalid response from createOrder:", result)
-          toast({
-            title: "Order failed",
-            description: "Invalid response from server. Please try again.",
-            variant: "destructive",
-          })
-          return
+        if (!res.ok) {
+          throw new Error(data.error || "Order failed")
         }
 
-        // Check for success and valid order
-        if (result.success && result.order && result.order.id && result.order.orderNumber) {
-          // For COD, redirect to confirmation
-          if (data.paymentMethod === "COD") {
-            clearCart()
-            toast({
-              title: "Order placed successfully!",
-              description: `Order ${result.order.orderNumber} has been confirmed.`,
-            })
-            router.push(`/s/${storeSlug}/order/${result.order.id}`)
-          } else {
-            // For UPI/online, initiate Razorpay payment
-            await handleRazorpayPayment(result.order.id)
-          }
-        } else {
-          // Handle failure case
-          const errorMessage = result.error || "Failed to place order. Please try again."
-          console.error("[CheckoutForm] Order creation failed:", {
-            success: result.success,
-            hasOrder: !!result.order,
-            error: errorMessage,
-          })
-          toast({
-            title: "Order failed",
-            description: errorMessage,
-            variant: "destructive",
-          })
+        if (!data.id) {
+          throw new Error("Invalid response from server")
         }
-      } catch (error) {
-        // Catch any unexpected errors
-        console.error("[CheckoutForm] Unexpected error during order creation:", error)
+
+        clearCart()
+        toast({ title: "Order placed", description: `Order ${data.orderNumber ?? data.id}` })
+        router.push(`/s/${storeSlug}/order/${data.id}/payment`)
+        router.refresh()
+      } catch (e) {
         toast({
           title: "Order failed",
-          description: error instanceof Error ? error.message : "An unexpected error occurred. Please try again.",
+          description: e instanceof Error ? e.message : "Something went wrong",
           variant: "destructive",
         })
       }
     })
   }
 
+  if (!isLoaded) {
+    return <p className="text-sm text-muted-foreground">Loading cart…</p>
+  }
+
+  if (cart.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed p-8 text-center space-y-4">
+        <p className="text-muted-foreground">Your cart is empty.</p>
+        <Button asChild variant="outline">
+          <Link href={`/s/${storeSlug}`}>Continue shopping</Link>
+        </Button>
+      </div>
+    )
+  }
+
   return (
-    <>
-      <Script
-        src="https://checkout.razorpay.com/v1/checkout.js"
-        strategy="lazyOnload"
-      />
-      <form onSubmit={handleSubmit(onSubmit)} className="grid gap-6 md:grid-cols-2">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Shipping Information</CardTitle>
-              <CardDescription>Enter your delivery details</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="customerName">Full Name *</Label>
-                <Input
-                  id="customerName"
-                  {...register("customerName")}
-                  placeholder="John Doe"
-                />
-                {errors.customerName && (
-                  <p className="text-sm text-destructive">{errors.customerName.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="customerEmail">Email *</Label>
-                <Input
-                  id="customerEmail"
-                  type="email"
-                  {...register("customerEmail")}
-                  placeholder="customer@example.com"
-                />
-                {errors.customerEmail && (
-                  <p className="text-sm text-destructive">{errors.customerEmail.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="customerPhone">Phone Number *</Label>
-                <Input
-                  id="customerPhone"
-                  type="tel"
-                  {...register("customerPhone")}
-                  placeholder="+91 9876543210"
-                />
-                {errors.customerPhone && (
-                  <p className="text-sm text-destructive">{errors.customerPhone.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="customerAddress">Address *</Label>
-                <Textarea
-                  id="customerAddress"
-                  {...register("customerAddress")}
-                  placeholder="Street address, building, apartment"
-                  rows={3}
-                />
-                {errors.customerAddress && (
-                  <p className="text-sm text-destructive">{errors.customerAddress.message}</p>
-                )}
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="city">City *</Label>
-                  <Input
-                    id="city"
-                    {...register("city")}
-                    placeholder="Mumbai"
+    <div className="grid gap-8 lg:grid-cols-2">
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Cart</h2>
+        <ul className="divide-y rounded-lg border">
+          {cart.map((item) => (
+            <li key={item.productId} className="flex gap-3 p-3">
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded bg-muted">
+                {item.imageUrl ? (
+                  <Image
+                    src={item.imageUrl}
+                    alt={item.name}
+                    fill
+                    className="object-cover"
                   />
-                  {errors.city && (
-                    <p className="text-sm text-destructive">{errors.city.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="state">State *</Label>
-                  <Input
-                    id="state"
-                    {...register("state")}
-                    placeholder="Maharashtra"
-                  />
-                  {errors.state && (
-                    <p className="text-sm text-destructive">{errors.state.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="pincode">Pincode *</Label>
-                  <Input
-                    id="pincode"
-                    {...register("pincode")}
-                    placeholder="400001"
-                    maxLength={6}
-                  />
-                  {errors.pincode && (
-                    <p className="text-sm text-destructive">{errors.pincode.message}</p>
-                  )}
-                </div>
+                ) : null}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Method</CardTitle>
-              <CardDescription>Choose how you want to pay</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup
-                value={paymentMethod}
-                onValueChange={(value) => setValue("paymentMethod", value as "COD" | "UPI")}
-              >
-                <div className="flex items-center space-x-2 p-4 border rounded-lg">
-                  <RadioGroupItem value="COD" id="cod" />
-                  <Label htmlFor="cod" className="flex-1 cursor-pointer">
-                    <div>
-                      <p className="font-medium">Cash on Delivery (COD)</p>
-                      <p className="text-sm text-muted-foreground">Pay when you receive</p>
-                    </div>
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2 p-4 border rounded-lg">
-                  <RadioGroupItem value="UPI" id="upi" />
-                  <Label htmlFor="upi" className="flex-1 cursor-pointer">
-                    <div>
-                      <p className="font-medium">UPI / Card / Netbanking</p>
-                      <p className="text-sm text-muted-foreground">Pay online via Razorpay</p>
-                    </div>
-                  </Label>
-                </div>
-              </RadioGroup>
-              {errors.paymentMethod && (
-                <p className="text-sm text-destructive mt-2">{errors.paymentMethod.message}</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Coupon Code</CardTitle>
-              <CardDescription>Enter a coupon code to apply discount</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {appliedCoupon ? (
-                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
-                  <div>
-                    <p className="text-sm font-medium text-green-900">
-                      Coupon {appliedCoupon.code} applied
-                    </p>
-                    <p className="text-sm text-green-700">
-                      Discount: ₹{appliedCoupon.discount.toFixed(2)}
-                    </p>
-                  </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium truncate">{item.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  ₹{item.price.toFixed(2)} × {item.quantity}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Input
+                    className="h-8 w-20"
+                    type="number"
+                    min={1}
+                    value={item.quantity}
+                    onChange={(e) =>
+                      updateQuantity(item.productId, parseInt(e.target.value, 10) || 1)
+                    }
+                  />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={handleRemoveCoupon}
+                    onClick={() => removeFromCart(item.productId)}
                   >
                     Remove
                   </Button>
                 </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Enter coupon code"
-                    value={couponCode}
-                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        handleApplyCoupon()
-                      }
-                    }}
-                    disabled={isValidatingCoupon}
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleApplyCoupon}
-                    disabled={isValidatingCoupon || !couponCode.trim()}
-                  >
-                    {isValidatingCoupon ? "Applying..." : "Apply"}
-                  </Button>
-                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="text-right text-lg font-semibold">
+          Total: ₹{getTotalPrice().toFixed(2)}
+        </p>
+
+        <div className="rounded-md border bg-muted/30 p-3">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Delivery check</p>
+          <p className="text-xs text-muted-foreground">
+            Enter your delivery pincode below — we&apos;ll verify serviceability automatically.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Shipping &amp; contact</h2>
+
+        <div className="space-y-2">
+          <Label htmlFor="pincode">Delivery pincode</Label>
+          <Input
+            id="pincode"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="6-digit pincode"
+            value={pincode}
+            onChange={(e) => setPincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          />
+          {debouncedPin.length === 6 && (
+            <p
+              className={cn(
+                "text-xs",
+                pinStatus === "serviceable" && "text-green-600 dark:text-green-400",
+                (pinStatus === "not_serviceable" ||
+                  pinStatus === "temporarily_unavailable" ||
+                  pinStatus === "error") &&
+                  "text-destructive"
               )}
-            </CardContent>
-          </Card>
+            >
+              {isCheckingPin || pinStatus === "checking"
+                ? "Checking…"
+                : pinMessage || ""}
+            </p>
+          )}
+          {debouncedPin.length > 0 && debouncedPin.length < 6 && (
+            <p className="text-xs text-muted-foreground">Enter a valid 6-digit pincode</p>
+          )}
         </div>
 
-        <div>
-          <Card className="sticky top-24">
-            <CardHeader>
-              <CardTitle>Order Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                {cart.map((item) => (
-                  <div key={item.productId} className="flex gap-3">
-                    {item.imageUrl && (
-                      <div className="relative h-16 w-16 flex-shrink-0">
-                        <Image
-                          src={item.imageUrl}
-                          alt={item.name}
-                          fill
-                          className="object-cover rounded"
-                        />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{item.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        ₹{item.price.toFixed(2)} × {item.quantity}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">₹{(item.price * item.quantity).toFixed(2)}</p>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 mt-1"
-                        onClick={() => removeFromCart(item.productId)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span>₹{totalPrice.toFixed(2)}</span>
-                </div>
-                {appliedCoupon && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Discount ({appliedCoupon.code})</span>
-                    <span>-₹{discountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                  <span>Total</span>
-                  <span>₹{finalPrice.toFixed(2)}</span>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full"
-                size="lg"
-                disabled={isPending || isProcessingPayment}
-              >
-                {isProcessingPayment
-                  ? "Processing Payment..."
-                  : isPending
-                  ? "Placing Order..."
-                  : paymentMethod === "COD"
-                  ? "Place Order (COD)"
-                  : "Pay ₹" + finalPrice.toFixed(2)}
-              </Button>
-            </CardContent>
-          </Card>
+        <div className="space-y-2">
+          <Label htmlFor="customerName">Full name</Label>
+          <Input
+            id="customerName"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            required
+          />
         </div>
-      </form>
-    </>
+        <div className="space-y-2">
+          <Label htmlFor="customerEmail">Email</Label>
+          <Input
+            id="customerEmail"
+            type="email"
+            value={customerEmail}
+            onChange={(e) => setCustomerEmail(e.target.value)}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="customerPhone">Phone</Label>
+          <Input
+            id="customerPhone"
+            value={customerPhone}
+            onChange={(e) => setCustomerPhone(e.target.value)}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="customerAddress">Address</Label>
+          <Input
+            id="customerAddress"
+            value={customerAddress}
+            onChange={(e) => setCustomerAddress(e.target.value)}
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Payment</Label>
+          <Select
+            value={paymentMethod}
+            onValueChange={(v) => setPaymentMethod(v as typeof paymentMethod)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="COD">Cash on delivery</SelectItem>
+              <SelectItem value="UPI">UPI</SelectItem>
+              <SelectItem value="RAZORPAY">Online (Razorpay)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button
+          type="button"
+          className="w-full"
+          disabled={
+            pending ||
+            cart.length === 0 ||
+            checkoutBlocked ||
+            isCheckingPin ||
+            debouncedPin.length !== 6
+          }
+          onClick={handlePlaceOrder}
+        >
+          {pending ? "Placing order…" : "Place order"}
+        </Button>
+      </div>
+    </div>
   )
 }

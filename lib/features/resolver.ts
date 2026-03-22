@@ -1,174 +1,68 @@
-/**
- * Feature Resolution Engine
- * 
- * Resolves merchant features from:
- * 1. Pricing Package features
- * 2. Merchant-specific overrides
- * 3. Defaults (disabled if not present)
- */
-
 import { prisma } from "@/lib/prisma"
-import { FeatureKey, ResolvedFeature, ResolvedFeatures } from "./types"
-import { GROWTH_FEATURE_KEYS_LIST } from "./featureKeys"
-import { FeatureValueType, FeatureOverrideMode } from "@prisma/client"
+import { GROWTH_FEATURE_KEYS_LIST } from "@/lib/features/featureKeys"
+import type { FeatureKey } from "@/lib/features/featureKeys"
 
-// Request-scoped cache to avoid repeated DB hits
-const requestCache = new Map<string, ResolvedFeatures>()
+export type ResolvedFeatureEntry = {
+  enabled: boolean
+  value?: unknown
+  source: "package" | "override" | "default"
+}
 
 /**
- * Resolve all features for a merchant
- * 
- * Resolution order:
- * 1. Merchant override (ENABLE/DISABLE/OVERRIDE)
- * 2. Package feature (if enabled)
- * 3. Default (disabled)
- * 
- * Special case: UNLIMITED_PRODUCTS enabled => PRODUCT_LIMIT treated as Infinity
- * Returns empty Map if feature tables are missing (e.g. before migration).
+ * Resolves effective Growth features for a merchant from assigned pricing package + overrides.
  */
 export async function resolveMerchantFeatures(
   merchantId: string
-): Promise<ResolvedFeatures> {
-  // Check request cache first
-  const cacheKey = `merchant:${merchantId}`
-  if (requestCache.has(cacheKey)) {
-    return requestCache.get(cacheKey)!
+): Promise<Map<FeatureKey, ResolvedFeatureEntry>> {
+  const map = new Map<FeatureKey, ResolvedFeatureEntry>()
+  for (const k of GROWTH_FEATURE_KEYS_LIST) {
+    map.set(k, { enabled: false, source: "default" })
   }
 
-  let resolved: ResolvedFeatures
-  try {
-    resolved = await resolveMerchantFeaturesUncached(merchantId)
-  } catch (e) {
-    console.error("resolveMerchantFeatures failed (feature tables missing?):", e)
-    resolved = new Map()
-  }
-  requestCache.set(cacheKey, resolved)
-  return resolved
-}
-
-async function resolveMerchantFeaturesUncached(merchantId: string): Promise<ResolvedFeatures> {
-  // Load merchant fee config to get package
   const feeConfig = await prisma.merchantFeeConfig.findUnique({
     where: { merchantId },
     include: {
       pricingPackage: {
-        where: {
-          status: "PUBLISHED",
-          isActive: true,
-          deletedAt: null,
+        include: {
+          features: { include: { feature: true } },
         },
       },
     },
   })
 
-  const packageId = feeConfig?.pricingPackageId
-
-  // Load package features
-  const packageFeatures = packageId
-    ? await prisma.pricingPackageFeature.findMany({
-        where: {
-          pricingPackageId: packageId,
-        },
-        include: {
-          feature: true,
-        },
+  if (feeConfig?.pricingPackage?.features) {
+    for (const pf of feeConfig.pricingPackage.features) {
+      if (!pf.enabled) continue
+      const key = pf.feature.key as FeatureKey
+      if (!map.has(key)) continue
+      map.set(key, {
+        enabled: true,
+        value: pf.valueJson ?? undefined,
+        source: "package",
       })
-    : []
-
-  // Load merchant overrides
-  const merchantOverrides = await prisma.merchantFeatureOverride.findMany({
-    where: { merchantId },
-    include: {
-      feature: true,
-    },
-  })
-
-  // Build feature map
-  const resolved: ResolvedFeatures = new Map()
-
-  // Only resolve canonical Growth features (9)
-  const allFeatures = (await prisma.feature.findMany()).filter((f) =>
-    GROWTH_FEATURE_KEYS_LIST.includes(f.key as FeatureKey)
-  )
-
-  for (const feature of allFeatures) {
-    const featureKey = feature.key as FeatureKey
-
-    // Check for merchant override first
-    const override = merchantOverrides.find((o) => o.feature.key === feature.key)
-
-    if (override) {
-      // Override wins
-      if (override.mode === FeatureOverrideMode.DISABLE) {
-        resolved.set(featureKey, {
-          enabled: false,
-          source: "override",
-        })
-      } else if (override.mode === FeatureOverrideMode.ENABLE) {
-        // Use package value if available, otherwise default
-        const packageFeature = packageFeatures.find((pf) => pf.feature.key === feature.key)
-        const value = packageFeature?.valueJson ?? getDefaultValue(feature.valueType)
-        resolved.set(featureKey, {
-          enabled: true,
-          value,
-          source: "override",
-        })
-      } else if (override.mode === FeatureOverrideMode.OVERRIDE) {
-        // Use override value
-        resolved.set(featureKey, {
-          enabled: true,
-          value: override.valueJson ?? getDefaultValue(feature.valueType),
-          source: "override",
-        })
-      }
-    } else {
-      // Check package feature
-      const packageFeature = packageFeatures.find((pf) => pf.feature.key === feature.key)
-
-      if (packageFeature && packageFeature.enabled) {
-        resolved.set(featureKey, {
-          enabled: true,
-          value: packageFeature.valueJson ?? getDefaultValue(feature.valueType),
-          source: "package",
-        })
-      } else {
-        // Default: disabled
-        resolved.set(featureKey, {
-          enabled: false,
-          source: "default",
-        })
-      }
     }
   }
 
-  return resolved
-}
+  const overrides = await prisma.merchantFeatureOverride.findMany({
+    where: { merchantId },
+    include: { feature: true },
+  })
 
-/**
- * Get default value for a feature value type
- */
-function getDefaultValue(valueType: FeatureValueType): any {
-  switch (valueType) {
-    case "BOOLEAN":
-      return true
-    case "NUMBER":
-      return 0
-    case "STRING":
-      return ""
-    case "JSON":
-      return null
-    default:
-      return null
+  for (const o of overrides) {
+    const key = o.feature.key as FeatureKey
+    if (!map.has(key)) continue
+    if (o.mode === "DISABLE") {
+      map.set(key, { enabled: false, source: "override" })
+    } else if (o.mode === "ENABLE") {
+      map.set(key, { enabled: true, source: "override" })
+    } else if (o.mode === "OVERRIDE") {
+      map.set(key, {
+        enabled: true,
+        value: o.valueJson ?? undefined,
+        source: "override",
+      })
+    }
   }
-}
 
-/**
- * Clear request cache (call at end of request)
- */
-export function clearFeatureCache(merchantId?: string) {
-  if (merchantId) {
-    requestCache.delete(`merchant:${merchantId}`)
-  } else {
-    requestCache.clear()
-  }
+  return map
 }

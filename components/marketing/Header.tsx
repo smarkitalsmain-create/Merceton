@@ -1,4 +1,7 @@
+"use client"
+
 import { useState } from "react"
+import { getAppUrl } from "@/lib/urls"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu } from "lucide-react"
@@ -42,10 +45,10 @@ const Header = () => {
 
         <div className="hidden items-center gap-3 md:flex">
           <Button variant="ghost" size="sm" asChild>
-            <a href="https://app.merceton.com/sign-in">Sign in</a>
+            <a href={getAppUrl("/sign-in")}>Sign in</a>
           </Button>
           <Button size="sm" asChild>
-            <a href="https://app.merceton.com/sign-up">Get started</a>
+            <a href={getAppUrl("/sign-up")}>Get started</a>
           </Button>
         </div>
 
@@ -69,10 +72,10 @@ const Header = () => {
               ))}
               <hr className="my-2 border-border" />
               <Button variant="outline" asChild className="w-full">
-                <a href="https://app.merceton.com/sign-in">Sign in</a>
+                <a href={getAppUrl("/sign-in")}>Sign in</a>
               </Button>
               <Button asChild className="w-full">
-                <a href="https://app.merceton.com/sign-up">Get started</a>
+                <a href={getAppUrl("/sign-up")}>Get started</a>
               </Button>
             </div>
           </SheetContent>

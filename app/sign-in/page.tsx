@@ -1,32 +1,17 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Store, TrendingUp, CreditCard, Zap } from "lucide-react"
-import { createSupabaseBrowserClient } from "@/lib/supabase/client"
-import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout"
+import AuthShell from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
-const BULLETS = [
-  { icon: Store, text: "Your store, your brand" },
-  { icon: TrendingUp, text: "Sell and scale with one dashboard" },
-  { icon: CreditCard, text: "Transparent fees, weekly payouts" },
-  { icon: Zap, text: "Go live in minutes, no code" },
-]
-
-const TESTIMONIAL = {
-  quote: "We went from idea to first sale in a weekend. Merceton just works.",
-  author: "Founder",
-  role: "D2C brand",
-}
-
-const STATS = ["Weekly payouts", "Zero code setup", "Custom domain"]
-
-export default function SignInPage() {
+function SignInForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -39,32 +24,34 @@ export default function SignInPage() {
 
     try {
       const supabase = createSupabaseBrowserClient()
-      const { error: err } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (err) {
-        setError(err.message)
+      if (signInError) {
+        setError(signInError.message)
         return
       }
 
-      router.push("/dashboard")
+      const next = searchParams.get("next")
+      const safeNext =
+        next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard"
+      router.push(safeNext)
       router.refresh()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Unknown error")
+      setError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <AuthSplitLayout
+    <AuthShell
       title="Sign in"
-      subtitle="Enter your email and password to access your dashboard."
-      bullets={BULLETS}
-      testimonial={TESTIMONIAL}
-      stats={STATS}
+      subtitle="Welcome back — sign in to your merchant dashboard."
+      mode="signin"
+      variant="merchant"
       footerLink={{
         label: "Don't have an account?",
         href: "/sign-up",
@@ -77,51 +64,54 @@ export default function SignInPage() {
             {error}
           </p>
         )}
-
         <div className="space-y-2">
-          <Label htmlFor="signin-email">Email</Label>
+          <Label htmlFor="email">Email</Label>
           <Input
-            id="signin-email"
+            id="email"
             type="email"
             autoComplete="email"
-            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            disabled={loading}
-            className="bg-background"
           />
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="signin-password">Password</Label>
+            <Label htmlFor="password">Password</Label>
             <Link
               href="/forgot-password"
-              className="text-xs text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              className="text-xs font-medium text-primary underline-offset-4 hover:underline"
             >
               Forgot password?
             </Link>
           </div>
           <Input
-            id="signin-password"
+            id="password"
             type="password"
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            disabled={loading}
-            className="bg-background"
           />
         </div>
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={loading}
-          aria-busy={loading}
-        >
+        <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-    </AuthSplitLayout>
+    </AuthShell>
+  )
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+          Loading…
+        </div>
+      }
+    >
+      <SignInForm />
+    </Suspense>
   )
 }

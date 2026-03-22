@@ -151,3 +151,5 @@ export function AuthSplitLayout({
     </div>
   )
 }
+
+export default AuthSplitLayout

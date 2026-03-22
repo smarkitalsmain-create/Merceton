@@ -1,3 +1,6 @@
+"use client"
+
+import { getAppUrl } from "@/lib/urls"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Play, ShoppingBag, CreditCard, BarChart3, Globe } from "lucide-react"
 
@@ -84,7 +87,7 @@ const Hero = () => {
 
             <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row lg:justify-start">
               <Button size="lg" asChild className="w-full sm:w-auto">
-                <a href="https://app.merceton.com/sign-up">
+                <a href={getAppUrl("/sign-up")}>
                   Get started <ArrowRight className="ml-2 h-4 w-4" />
                 </a>
               </Button>

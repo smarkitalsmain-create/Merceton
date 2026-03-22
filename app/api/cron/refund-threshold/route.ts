@@ -65,13 +65,14 @@ export async function GET(request: NextRequest) {
         
         const periodLabel = periodHours === 24 ? "Last 24h" : `Last ${periodHours}h`;
         
+        const { getAdminUrl } = await import("@/lib/urls");
         await sendOpsRefundThresholdAlert({
           periodLabel,
           refundCount,
           refundTotal: refundTotalNumber,
           threshold,
           currency: "₹",
-          adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/admin`,
+          adminUrl: getAdminUrl("/admin"),
         });
 
         return NextResponse.json({

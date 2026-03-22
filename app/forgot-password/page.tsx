@@ -3,7 +3,6 @@
 import { useState } from "react"
 import Link from "next/link"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
-import { getSiteUrl } from "@/lib/site"
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
@@ -19,18 +18,21 @@ export default function ForgotPasswordPage() {
 
     try {
       const supabase = createSupabaseBrowserClient()
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${getSiteUrl()}/reset-password`,
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo:
+          typeof window !== "undefined"
+            ? `${window.location.origin}/reset-password`
+            : undefined,
       })
 
-      if (error) {
-        setError(error.message)
+      if (resetError) {
+        setError(resetError.message)
         return
       }
 
       setMessage("If an account exists for that email, a reset link has been sent.")
-    } catch (err: any) {
-      setError(err?.message ?? "Unknown error")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
       setLoading(false)
     }
@@ -65,7 +67,7 @@ export default function ForgotPasswordPage() {
         >
           {loading ? "Sending..." : "Send reset link"}
         </button>
-        <p className="text-xs text-muted-foreground text-center">
+        <p className="text-xs text-muted-foreground">
           Remember your password?{" "}
           <Link href="/sign-in" className="text-primary underline">
             Back to sign in

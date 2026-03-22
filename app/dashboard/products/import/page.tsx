@@ -1,14 +1,19 @@
-import { redirect } from "next/navigation"
 import { requireMerchant } from "@/lib/auth"
-import { canUseFeature } from "@/lib/features/canUseFeature"
-import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
-import { ProductImportClient } from "@/components/dashboard/ProductImportClient"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 export default async function ProductImportPage() {
-  const merchant = await requireMerchant()
-  const allowed = await canUseFeature(merchant.id, GROWTH_FEATURE_KEYS.G_BULK_CSV)
-  if (!allowed) {
-    redirect("/dashboard/upgrade")
-  }
-  return <ProductImportClient />
+  await requireMerchant()
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <h1 className="text-3xl font-bold">Import products</h1>
+      <p className="text-muted-foreground">
+        Bulk CSV import is not wired in this build. Add products manually from the products list.
+      </p>
+      <Button asChild>
+        <Link href="/dashboard/products">Go to products</Link>
+      </Button>
+    </div>
+  )
 }

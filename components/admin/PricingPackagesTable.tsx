@@ -60,7 +60,7 @@ export function PricingPackagesTable({
         if (result.success) {
           toast({
             title: "Success",
-            description: `Package ${result.package.isActive ? "activated" : "deactivated"}`,
+            description: `Package ${!currentActive ? "activated" : "deactivated"}`,
           })
           window.location.reload()
         }

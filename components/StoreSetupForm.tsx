@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getMarketingHostLabel } from "@/lib/urls"
 
 export default function StoreSetupForm() {
   const router = useRouter()
@@ -73,7 +74,9 @@ export default function StoreSetupForm() {
           <div className="space-y-2">
             <Label htmlFor="storeSlug">Store URL</Label>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">merceton.com/store/</span>
+              <span className="text-sm text-muted-foreground">
+                {getMarketingHostLabel()}/store/
+              </span>
               <Input
                 id="storeSlug"
                 name="storeSlug"

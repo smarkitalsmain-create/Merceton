@@ -38,7 +38,9 @@ export async function GET(
     getEffectiveFeatures(merchantId),
   ])
 
-  const overrideMap = new Map(overrides.map((o) => [o.featureId, o]))
+  const overrideMap = new Map<string, (typeof overrides)[number]>(
+    overrides.map((o) => [o.featureId, o])
+  )
 
   const list = allFeatures.map((f) => {
     const resolved = effective.get(f.key as any)

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     // Create order via server action
     const result = await createOrder(validatedInput)
 
-    if (!result.success) {
+    if (result.success === false) {
       return NextResponse.json(
         { error: result.error },
         { status: 400 }

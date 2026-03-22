@@ -1,3 +1,4 @@
+import { getAppUrl } from "@/lib/urls"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Check, MessageCircle } from "lucide-react"
@@ -46,7 +47,7 @@ const Pricing = () => (
           </p>
           <div className="flex flex-col gap-3">
             <Button size="lg" className="w-full" asChild>
-              <a href="https://app.merceton.com/sign-up">Get started free</a>
+              <a href={getAppUrl("/sign-up")}>Get started free</a>
             </Button>
             <Button variant="outline" size="lg" className="w-full" asChild>
               <a href="mailto:info@smarkitalstech.com">

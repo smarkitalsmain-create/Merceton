@@ -8,10 +8,8 @@ import { getEffectiveFeeConfig } from "@/lib/pricing"
 import { StoreUrlDisplay } from "@/components/settings/StoreUrlDisplay"
 
 export default async function SettingsPage() {
-  // Require admin role - only admins can access settings
   const { merchant: merchantBase } = await requireAdmin()
 
-  // Fetch merchant with all fields needed for settings
   const merchant = await prisma.merchant.findUnique({
     where: { id: merchantBase.id },
   })

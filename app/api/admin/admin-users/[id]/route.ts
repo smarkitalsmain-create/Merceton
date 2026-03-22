@@ -1,57 +1,9 @@
 import { NextResponse } from "next/server"
-import { requireAdminForApi } from "@/lib/admin-auth"
-import { featureFlags } from "@/lib/featureFlags"
 
-export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
-
-export async function GET(
-  _request: Request,
-  context: { params: { id: string } }
-) {
-  const actor = await requireAdminForApi()
-  if (actor instanceof NextResponse) return actor
-  if (!featureFlags.adminAdminUsers) {
-    return NextResponse.json(
-      { error: "Feature disabled by configuration" },
-      { status: 503 }
-    )
-  }
-  return NextResponse.json({ error: "Admin user not found" }, { status: 404 })
-}
-
-export async function PUT(
-  _request: Request,
-  context: { params: { id: string } }
-) {
-  const actor = await requireAdminForApi()
-  if (actor instanceof NextResponse) return actor
-  if (!featureFlags.adminAdminUsers) {
-    return NextResponse.json(
-      { error: "Feature disabled by configuration" },
-      { status: 503 }
-    )
-  }
+export async function GET() {
   return NextResponse.json(
-    { error: "Admin user management is not configured" },
+    { ok: false, error: "Admin user details endpoint not configured yet." },
     { status: 503 }
   )
 }
 
-export async function DELETE(
-  _request: Request,
-  context: { params: { id: string } }
-) {
-  const actor = await requireAdminForApi()
-  if (actor instanceof NextResponse) return actor
-  if (!featureFlags.adminAdminUsers) {
-    return NextResponse.json(
-      { error: "Feature disabled by configuration" },
-      { status: 503 }
-    )
-  }
-  return NextResponse.json(
-    { error: "Admin user management is not configured" },
-    { status: 503 }
-  )
-}

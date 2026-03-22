@@ -11,6 +11,7 @@ import {
   sendTicketReplyToMerchant,
   sendTicketReplyToAdmin,
 } from "@/lib/email/notifications"
+import { getAdminUrl, getAppUrl } from "@/lib/urls"
 
 const createTicketSchema = z.object({
   subject: z.string().min(1, "Subject is required").max(200, "Subject too long"),
@@ -68,7 +69,7 @@ export async function createTicket(input: z.infer<typeof createTicketSchema>) {
 
   // Send email to internal team
   const ticketNumber = `TKT-${ticket.id.slice(-8).toUpperCase()}`
-  const ticketUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/admin/support/${ticket.id}`
+  const ticketUrl = getAdminUrl(`/admin/support/${ticket.id}`)
 
   sendTicketCreatedEmail({
     ticketId: ticket.id,
@@ -174,8 +175,8 @@ export async function replyToTicket(input: z.infer<typeof replyTicketSchema>) {
   // Send email notifications
   const ticketNumber = `TKT-${ticket.id.slice(-8).toUpperCase()}`
   const ticketUrl = isAdmin
-    ? `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/support/${ticket.id}`
-    : `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/admin/support/${ticket.id}`
+    ? getAppUrl(`/dashboard/support/${ticket.id}`)
+    : getAdminUrl(`/admin/support/${ticket.id}`)
 
   if (isAdmin) {
     // Admin replied -> notify merchant

@@ -20,7 +20,7 @@ export default async function AdminLayout({
         <div className="flex h-screen">
           <AdminSidebar />
           <div className="flex flex-1 flex-col overflow-hidden">
-            <AdminHeader email={actor.email} />
+            <AdminHeader email={actor.email ?? ""} />
             <main className="flex-1 overflow-y-auto p-6">{children}</main>
           </div>
         </div>

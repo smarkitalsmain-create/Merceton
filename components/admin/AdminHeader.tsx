@@ -1,5 +1,6 @@
 "use client"
 
+import { getAppUrl } from "@/lib/urls"
 import { AdminUserMenu } from "./AdminUserMenu"
 
 interface AdminHeaderProps {
@@ -16,7 +17,7 @@ export function AdminHeader({ email }: AdminHeaderProps) {
       </div>
       <div className="flex items-center gap-4">
         <a
-          href="http://app.merceton.localhost:3000"
+          href={getAppUrl("/dashboard")}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           Go to Merchant Dashboard →

@@ -3,63 +3,38 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import {
-  LayoutDashboard,
-  Store,
-  ShoppingCart,
-  CreditCard,
-  Wallet,
-  Globe,
-  Settings,
-  FileText,
-  Headphones,
-  FileCheck,
-} from "lucide-react"
 
-const navigation = [
-  { name: "Overview", href: "/admin", icon: LayoutDashboard },
-  { name: "Merchants", href: "/admin/merchants", icon: Store },
-  { name: "Pricing Packages", href: "/admin/pricing", icon: CreditCard },
-  { name: "Support", href: "/admin/support", icon: Headphones },
-  { name: "Domains", href: "/admin/domains", icon: Globe },
-  { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
-  { name: "Payouts", href: "/admin/payouts", icon: Wallet },
-  { name: "Platform Invoices", href: "/admin/platform-invoices", icon: FileText },
-  { name: "Settings", href: "/admin/settings", icon: Settings },
-  { name: "Audit Logs", href: "/admin/audit-logs", icon: FileCheck },
+const LINKS = [
+  { href: "/_admin", label: "Overview" },
+  { href: "/_admin/merchants", label: "Merchants" },
+  { href: "/_admin/orders", label: "Orders" },
+  { href: "/_admin/pricing-packages", label: "Pricing packages" },
+  { href: "/_admin/audit-logs", label: "Audit logs" },
 ]
 
 export function AdminSidebar() {
   const pathname = usePathname()
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-muted/40">
-      <div className="flex h-16 items-center border-b px-6">
-        <Link href="/admin" className="flex items-center gap-2">
-          <Store className="h-6 w-6" />
-          <span className="text-lg font-bold">Merceton Admin</span>
-        </Link>
-      </div>
-      <nav className="flex-1 space-y-1 p-4">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+    <aside className="hidden w-56 shrink-0 border-r bg-muted/30 md:block">
+      <div className="flex h-16 items-center border-b px-4 font-semibold">Admin</div>
+      <nav className="flex flex-col gap-1 p-2">
+        {LINKS.map(({ href, label }) => {
+          const active = pathname === href || (href !== "/_admin" && pathname.startsWith(href))
           return (
             <Link
-              key={item.name}
-              href={item.href}
+              key={href}
+              href={href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background hover:text-foreground"
+                "rounded-md px-3 py-2 text-sm transition-colors",
+                active ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:bg-background/60"
               )}
             >
-              <item.icon className="h-5 w-5" />
-              {item.name}
+              {label}
             </Link>
           )
         })}
       </nav>
-    </div>
+    </aside>
   )
 }

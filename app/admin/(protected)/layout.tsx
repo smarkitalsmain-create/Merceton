@@ -1,52 +1,6 @@
-import { redirect } from "next/navigation"
-import { AdminSidebar } from "@/components/AdminSidebar"
-import { AdminHeader } from "@/components/admin/AdminHeader"
-import { AccessDenied } from "@/components/admin/AccessDenied"
-import { createSupabaseServerReadonlyClient } from "@/lib/supabase/server-readonly"
-import { isEmailInAllowlist, isAllowlistConfigured } from "@/lib/admin-allowlist"
+import type { ReactNode } from "react"
 
-/**
- * Protected admin layout - enforces authentication and allowlist.
- * Only routes under (protected) are guarded by this layout.
- */
-export default async function ProtectedAdminLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  // Check authentication
-  const supabase = createSupabaseServerReadonlyClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  // If not logged in, redirect to sign-in
-  if (!user) {
-    redirect("/admin/sign-in?redirect=/admin")
-  }
-
-  // Check if allowlist is configured
-  const allowlistConfigured = isAllowlistConfigured()
-
-  // Check if user is in allowlist
-  const isSuperAdmin = isEmailInAllowlist(user.email)
-
-  // If not in allowlist, show access denied
-  if (!isSuperAdmin) {
-    return <AccessDenied allowlistConfigured={allowlistConfigured} />
-  }
-
-  return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <aside className="w-64 shrink-0 border-r bg-background">
-        <AdminSidebar />
-      </aside>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="shrink-0 border-b bg-background">
-          <AdminHeader email={user.email ?? ""} />
-        </header>
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
-    </div>
-  )
+export default function AdminProtectedLayout({ children }: { children: ReactNode }) {
+  return <>{children}</>
 }
+

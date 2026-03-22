@@ -1,34 +1,25 @@
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 const faqs = [
   {
-    q: "What is Merceton?",
-    a: "Merceton is an India-first e-commerce enablement platform that lets SMEs launch online stores with built-in payments, automated fee management, and weekly bank settlements — all without any technical expertise.",
-  },
-  {
-    q: "How do settlements work?",
-    a: "After each order, the platform fee (₹5 + 2% + GST) is automatically deducted. Your net earnings are accumulated in an internal ledger and settled to your registered bank account every week.",
-  },
-  {
-    q: "Do you provide shipping?",
+    q: "Do you handle shipping directly?",
     a: "Merceton does not handle shipping directly. You can integrate with any shipping provider of your choice. Shipping charges are managed and billed separately by the provider.",
   },
   {
-    q: "Can I use my own domain?",
-    a: "Absolutely. You can connect your own custom domain to your Merceton storefront with free SSL. Your customers will only see your brand.",
+    q: "How do platform fees work?",
+    a: "You pay a platform fee on successful orders. The exact fee is applied automatically, and your settlements are handled on a regular payout cycle.",
   },
   {
-    q: "What charges apply?",
-    a: "You pay ₹5 + 2% per successful order, plus 18% GST on the platform fee. Payment gateway charges by Razorpay and shipping costs are separate and charged by the respective providers.",
+    q: "Can I connect a custom domain?",
+    a: "Yes. Merceton supports custom domains so customers see your brand. SSL is handled automatically.",
   },
   {
-    q: "What if my account is put on hold?",
-    a: "If your account is flagged for compliance or policy reasons, we'll notify you via email with clear next steps. Pending settlements are held until the issue is resolved. You can reach out to our support team for assistance.",
+    q: "Do you support invoices and payment reconciliation?",
+    a: "Yes. Merceton generates invoices and provides ledger visibility so you can reconcile orders and payouts with confidence.",
+  },
+  {
+    q: "Is merchant data isolated?",
+    a: "Yes. Merchant data is scoped to your account so you can only access your own storefront and transactions.",
   },
 ]
 
@@ -40,22 +31,25 @@ const FAQ = () => (
           Frequently asked questions
         </h2>
         <p className="mt-4 text-lg text-muted-foreground">
-          Got questions? We&apos;ve got answers.
+          Quick answers to help you get started with Merceton.
         </p>
       </div>
 
-      <Accordion type="single" collapsible className="mx-auto max-w-2xl">
-        {faqs.map((faq, i) => (
-          <AccordionItem key={i} value={`faq-${i}`}>
-            <AccordionTrigger className="text-left text-base font-medium">
-              {faq.q}
-            </AccordionTrigger>
-            <AccordionContent className="text-muted-foreground leading-relaxed">
-              {faq.a}
-            </AccordionContent>
-          </AccordionItem>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {faqs.map((item) => (
+          <Card
+            key={item.q}
+            className="border-border/60 bg-card/60 shadow-sm"
+          >
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">{item.q}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm leading-relaxed text-muted-foreground">{item.a}</p>
+            </CardContent>
+          </Card>
         ))}
-      </Accordion>
+      </div>
     </div>
   </section>
 )

@@ -150,12 +150,13 @@ export async function POST(request: NextRequest) {
     // Email trigger: Webhook failure alert (non-blocking)
     try {
       const { sendOpsWebhookFailureAlert } = await import("@/lib/email/notifications");
+      const { getAdminUrl } = await import("@/lib/urls");
       await sendOpsWebhookFailureAlert({
         eventName: "razorpay.webhook",
         endpoint: "/api/webhooks/razorpay",
         errorMessage: error instanceof Error ? error.message : String(error),
         occurredAt: new Date().toISOString(),
-        adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/admin`,
+        adminUrl: getAdminUrl("/admin"),
       });
     } catch (emailError) {
       console.error("[email] Failed to send webhook failure alert:", emailError);

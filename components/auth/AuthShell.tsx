@@ -163,3 +163,5 @@ export function AuthShell({
     </div>
   )
 }
+
+export default AuthShell

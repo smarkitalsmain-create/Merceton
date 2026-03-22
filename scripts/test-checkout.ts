@@ -62,13 +62,14 @@ async function main() {
     customerEmail: "test@example.com",
     customerPhone: "9876543210",
     customerAddress: "123 Test Street, Test City, Test State 123456",
+    pincode: "110001",
     paymentMethod: "COD" as const,
   }
 
   console.log("🚀 Creating order...")
   const result = await createOrder(testInput)
 
-  if (!result.success) {
+  if (result.success === false) {
     console.error("❌ Order creation failed:", result.error)
     process.exit(1)
   }

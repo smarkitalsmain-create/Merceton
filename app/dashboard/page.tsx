@@ -1,31 +1,26 @@
 import { requireMerchant } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { withTiming } from "@/lib/perf"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
-export const revalidate = 60
-
 export default async function DashboardPage() {
   const merchant = await requireMerchant()
 
-  const { productCount, orderCount, totalRevenue } = await withTiming(
-    "dashboard-page-data",
-    async () => {
-      const [productCount, orderCount, revenueAgg] = await prisma.$transaction([
-        prisma.product.count({ where: { merchantId: merchant.id } }),
-        prisma.order.count({ where: { merchantId: merchant.id } }),
-        prisma.payment.aggregate({
-          _sum: { amount: true },
-          where: { merchantId: merchant.id, status: "PAID" },
-        }),
-      ])
-      const totalRevenue =
-        revenueAgg._sum.amount != null ? Number(revenueAgg._sum.amount) : 0
-      return { productCount, orderCount, totalRevenue }
-    }
-  )
+  const [productCount, orderCount, paidPaymentsRaw] = await Promise.all([
+    prisma.product.count({ where: { merchantId: merchant.id } }),
+    prisma.order.count({ where: { merchantId: merchant.id } }),
+    prisma.payment.findMany({
+      where: { merchantId: merchant.id, status: "PAID" },
+      select: { amount: true },
+    }),
+  ])
+
+  const paidPayments = paidPaymentsRaw.map((p) => ({
+    amount: p.amount.toNumber(),
+  }))
+
+  const totalRevenue = paidPayments.reduce((sum, p) => sum + p.amount, 0)
 
   return (
     <div className="space-y-8">

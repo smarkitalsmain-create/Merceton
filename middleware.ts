@@ -27,6 +27,47 @@ function getHostType(host: string | null): HostType {
   return "landing"
 }
 
+function isLocalDevHost(host: string | null): boolean {
+  if (!host) return false
+  const h = host.toLowerCase()
+  return (
+    h.startsWith("localhost") ||
+    h.startsWith("127.0.0.1") ||
+    h.includes(".localhost")
+  )
+}
+
+/**
+ * On localhost, marketing links use /app/... while real routes are /..., /dashboard, etc.
+ * Rewrite /app → /dashboard, /app/sign-in → /sign-in, etc.
+ */
+function stripLandingAppPrefix(pathname: string): {
+  innerPath: string
+  rewrite: boolean
+} {
+  if (pathname === "/app" || pathname === "/app/") {
+    return { innerPath: "/dashboard", rewrite: true }
+  }
+  if (pathname.startsWith("/app/")) {
+    const rest = pathname.slice(4)
+    const inner = rest.startsWith("/") ? rest : `/${rest}`
+    return { innerPath: inner, rewrite: true }
+  }
+  return { innerPath: pathname, rewrite: false }
+}
+
+function resolveEffectiveHostType(
+  hostType: HostType,
+  host: string | null,
+  pathname: string,
+  appPrefixRewrite: boolean
+): HostType {
+  if (!isLocalDevHost(host)) return hostType
+  if (appPrefixRewrite) return "app"
+  if (pathname.startsWith("/admin")) return "admin"
+  return hostType
+}
+
 function isPublicAuthPath(pathname: string): boolean {
   if (
     pathname === "/sign-in" ||
@@ -45,18 +86,56 @@ function isPublicAuthPath(pathname: string): boolean {
   return false
 }
 
+function rewriteToPath(req: NextRequest, pathname: string) {
+  const url = req.nextUrl.clone()
+  url.pathname = pathname
+  return NextResponse.rewrite(url)
+}
+
+function copyCookies(from: NextResponse, to: NextResponse) {
+  from.cookies.getAll().forEach((c) => {
+    to.cookies.set(c.name, c.value, c)
+  })
+}
+
 export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl
   const host = req.headers.get("host")
   const hostType = getHostType(host)
+  const local = isLocalDevHost(host)
+
+  let pathname = req.nextUrl.pathname
+  let appPrefixRewrite = false
 
   // Skip Next internals, APIs, and static assets
   if (isStaticOrInternal(pathname)) {
     return NextResponse.next()
   }
 
-  // Host-specific root behavior and disallowed paths on landing host
+  // Local dev: /dashboard on marketing host → canonical /app/dashboard URLs
+  if (hostType === "landing" && local && pathname.startsWith("/dashboard")) {
+    return NextResponse.redirect(
+      new URL(`/app${pathname}${req.nextUrl.search}`, req.url)
+    )
+  }
+
+  // Local dev: map /app/* to real routes (same as cross-origin app.* in prod)
   if (hostType === "landing") {
+    const stripped = stripLandingAppPrefix(pathname)
+    if (stripped.rewrite) {
+      pathname = stripped.innerPath
+      appPrefixRewrite = true
+    }
+  }
+
+  const effectiveHostType = resolveEffectiveHostType(
+    hostType,
+    host,
+    pathname,
+    appPrefixRewrite
+  )
+
+  // Host-specific root behavior and disallowed paths on landing host (non-local only)
+  if (hostType === "landing" && !local) {
     if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
       return NextResponse.redirect(new URL("/", req.url))
     }
@@ -72,14 +151,14 @@ export async function middleware(req: NextRequest) {
 
   // Public auth routes (always bypass auth gate to avoid loops)
   if (isPublicAuthPath(pathname)) {
-    return NextResponse.next()
+    return appPrefixRewrite ? rewriteToPath(req, pathname) : NextResponse.next()
   }
 
-  // Determine if this route requires auth
+  // Determine if this route requires auth (subdomain or localhost /app + /admin paths)
   const isAppProtected =
-    hostType === "app" && pathname.startsWith("/dashboard")
+    effectiveHostType === "app" && pathname.startsWith("/dashboard")
   const isAdminProtected =
-    hostType === "admin" &&
+    effectiveHostType === "admin" &&
     pathname.startsWith("/admin") &&
     pathname !== "/admin/sign-in"
 
@@ -96,7 +175,7 @@ export async function middleware(req: NextRequest) {
         "[middleware] Supabase env vars missing; auth gate skipped. Route-level guards must handle auth."
       )
     }
-    return NextResponse.next()
+    return appPrefixRewrite ? rewriteToPath(req, pathname) : NextResponse.next()
   }
 
   const response = NextResponse.next()
@@ -127,13 +206,17 @@ export async function middleware(req: NextRequest) {
 
     if (!user) {
       const redirectPath =
-        hostType === "admin" ? "/admin/sign-in" : "/sign-in"
+        effectiveHostType === "admin" ? "/admin/sign-in" : "/sign-in"
       const redirectUrl = new URL(redirectPath, req.url)
       redirectUrl.searchParams.set("next", pathname)
       return NextResponse.redirect(redirectUrl)
     }
 
-    // User is authenticated; allow request through
+    if (appPrefixRewrite) {
+      const rewritten = rewriteToPath(req, pathname)
+      copyCookies(response, rewritten)
+      return rewritten
+    }
     return response
   } catch (err) {
     if (process.env.NODE_ENV === "development") {
@@ -141,6 +224,11 @@ export async function middleware(req: NextRequest) {
         "[middleware] Unexpected error in middleware, allowing request through:",
         err
       )
+    }
+    if (appPrefixRewrite) {
+      const rewritten = rewriteToPath(req, pathname)
+      copyCookies(response, rewritten)
+      return rewritten
     }
     return response
   }
@@ -152,4 +240,3 @@ export const config = {
     "/((?!_next/|api/|favicon.ico|robots.txt|sitemap.xml|static/|assets/|images/).*)",
   ],
 }
-

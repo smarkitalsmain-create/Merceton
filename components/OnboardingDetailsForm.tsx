@@ -155,7 +155,7 @@ export function OnboardingDetailsForm({
   const handlePanSave = (data: PanStepData) => {
     startTransition(async () => {
       const result = await updateOnboardingPan(data)
-      if (result.success) {
+      if (result.success === true) {
         toast({
           title: "PAN details updated",
           description: "Your PAN information has been updated successfully.",
@@ -188,7 +188,7 @@ export function OnboardingDetailsForm({
       }
 
       const result = await updateOnboardingGst(data)
-      if (result.success) {
+      if (result.success === true) {
         toast({
           title: "GST details updated",
           description:
@@ -209,7 +209,7 @@ export function OnboardingDetailsForm({
   const handleBusinessSave = (data: BusinessBasicsStepData) => {
     startTransition(async () => {
       const result = await updateOnboardingBusiness(data)
-      if (result.success) {
+      if (result.success === true) {
         toast({
           title: "Business details updated",
           description: "Your business basics have been updated successfully.",
@@ -229,7 +229,7 @@ export function OnboardingDetailsForm({
   const handleContactSave = (data: ContactInfoData) => {
     startTransition(async () => {
       const result = await updateOnboardingContactInfo(data)
-      if (result.success) {
+      if (result.success === true) {
         toast({
           title: "Contact info updated",
           description: "Your contact information has been updated successfully.",

@@ -1,52 +1,22 @@
-import { redirect } from "next/navigation"
 import Link from "next/link"
 import { requireMerchant } from "@/lib/auth"
-import { assertFeature, FeatureDeniedError } from "@/lib/features"
-import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
-import { prisma } from "@/lib/prisma"
-import { DomainSettingsForm } from "@/components/DomainSettingsForm"
-import { ChevronRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export default async function DomainSettingsPage() {
-  const merchant = await requireMerchant()
-  try {
-    await assertFeature(merchant.id, GROWTH_FEATURE_KEYS.G_CUSTOM_DOMAIN, "/dashboard/settings/domain")
-  } catch (e) {
-    if (e instanceof FeatureDeniedError) redirect("/dashboard/upgrade")
-    throw e
-  }
-
-  const merchantWithDomain = await prisma.merchant.findUnique({
-    where: { id: merchant.id },
-    select: {
-      id: true,
-      customDomain: true,
-      domainStatus: true,
-      domainVerificationToken: true,
-      domainVerifiedAt: true,
-    },
-  })
-
-  if (!merchantWithDomain) {
-    return <div>Merchant not found</div>
-  }
+  await requireMerchant()
 
   return (
-    <div className="space-y-6">
-      <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/dashboard" className="hover:text-foreground">Dashboard</Link>
-        <ChevronRight className="h-4 w-4" />
-        <Link href="/dashboard/settings" className="hover:text-foreground">Settings</Link>
-        <ChevronRight className="h-4 w-4" />
-        <span className="text-foreground">Custom Domain</span>
-      </nav>
+    <div className="space-y-4 max-w-2xl">
       <div>
-        <h1 className="text-3xl font-bold">Custom Domain</h1>
+        <h1 className="text-3xl font-bold">Custom domain</h1>
         <p className="text-muted-foreground">
-          Connect your custom domain to your storefront
+          Domain connection is managed from store settings. Use the link below to configure your domain when
+          available.
         </p>
       </div>
-      <DomainSettingsForm merchant={merchantWithDomain} />
+      <Button asChild variant="outline">
+        <Link href="/dashboard/settings/store">Back to store settings</Link>
+      </Button>
     </div>
   )
 }

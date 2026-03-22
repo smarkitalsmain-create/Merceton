@@ -2,84 +2,72 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
   Package,
-  ShoppingCart,
-  Settings,
+  ShoppingBag,
   Store,
+  Settings,
   Wallet,
-  Palette,
-  FileText,
-  Tag,
-  BarChart3,
-  Headphones,
-  Globe,
+  BookOpen,
+  Ticket,
 } from "lucide-react"
-import { GROWTH_FEATURE_KEYS } from "@/lib/features/featureKeys"
+import { cn } from "@/lib/utils"
 
-const navigation: Array<{
-  name: string
-  href: string
-  icon: React.ComponentType<{ className?: string }>
-  featureKey?: string
-}> = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Products", href: "/dashboard/products", icon: Package },
-  { name: "Import Products", href: "/dashboard/products/import", icon: Package, featureKey: GROWTH_FEATURE_KEYS.G_BULK_CSV },
-  { name: "Orders", href: "/dashboard/orders", icon: ShoppingCart },
-  { name: "Storefront", href: "/dashboard/storefront", icon: Palette },
-  { name: "Coupons", href: "/dashboard/marketing/coupons", icon: Tag, featureKey: GROWTH_FEATURE_KEYS.G_COUPONS },
-  { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-  { name: "Payouts", href: "/dashboard/payouts", icon: Wallet },
-  { name: "Billing", href: "/dashboard/billing", icon: FileText },
-  { name: "Support", href: "/dashboard/support", icon: Headphones },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
-  { name: "Custom Domain", href: "/dashboard/settings/domain", icon: Globe, featureKey: GROWTH_FEATURE_KEYS.G_CUSTOM_DOMAIN },
+const NAV_ITEMS = [
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
+  { href: "/dashboard/products", label: "Products", icon: Package },
+  { href: "/dashboard/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/dashboard/storefront", label: "Storefront", icon: Store },
+  { href: "/dashboard/payouts", label: "Payouts", icon: Wallet },
+  { href: "/dashboard/ledger", label: "Ledger", icon: BookOpen },
+  { href: "/dashboard/support/new", label: "Support", icon: Ticket },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]
 
-interface DashboardSidebarProps {
-  enabledFeatureKeys?: Set<string>
+function isActive(pathname: string, href: string, exact?: boolean) {
+  if (exact) return pathname === href
+  return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-export function DashboardSidebar({ enabledFeatureKeys }: DashboardSidebarProps = {}) {
+/**
+ * Primary merchant dashboard navigation (named export).
+ */
+export function DashboardSidebar() {
   const pathname = usePathname()
 
-  const visible = navigation.filter((item) => {
-    if (!enabledFeatureKeys) return true
-    if (!item.featureKey) return true
-    return enabledFeatureKeys.has(item.featureKey)
-  })
-
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-muted/40">
-      <div className="flex h-16 items-center border-b px-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <Store className="h-6 w-6" />
-          <span className="text-lg font-bold">Merceton</span>
+    <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-muted/30">
+      <div className="flex h-16 items-center border-b border-border px-6">
+        <Link
+          href="/dashboard"
+          className="text-lg font-semibold tracking-tight text-foreground hover:text-primary"
+        >
+          Merceton
         </Link>
       </div>
-      <nav className="flex-1 space-y-1 p-4">
-        {visible.map((item) => {
-          const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+      <nav className="flex flex-1 flex-col gap-1 p-3" aria-label="Dashboard">
+        {NAV_ITEMS.map((item) => {
+          const { href, label, icon: Icon } = item
+          const exact = "exact" in item && item.exact === true
+          const active = isActive(pathname, href, exact)
           return (
             <Link
-              key={item.name}
-              href={item.href}
+              key={href}
+              href={href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background hover:text-foreground"
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              <item.icon className="h-5 w-5" />
-              {item.name}
+              <Icon className="h-4 w-4 shrink-0" aria-hidden />
+              {label}
             </Link>
           )
         })}
       </nav>
-    </div>
+    </aside>
   )
 }

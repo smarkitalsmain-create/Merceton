@@ -26,6 +26,10 @@ export const createOrderSchema = z.object({
     .max(15, "Phone number too long")
     .regex(/^[+]?[\d\s-()]+$/, "Invalid phone number format"),
   customerAddress: z.string().min(1, "Address is required").max(500, "Address too long"),
+  /** Delivery pincode — validated server-side against logistics serviceability */
+  pincode: z
+    .string()
+    .regex(/^\d{6}$/, "Enter a valid 6-digit pincode"),
   paymentMethod: z.enum(["COD", "UPI", "RAZORPAY"], {
     errorMap: () => ({ message: "Invalid payment method" }),
   }),

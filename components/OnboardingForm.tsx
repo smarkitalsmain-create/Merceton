@@ -199,7 +199,7 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
         }
 
         // Handle response based on success flag
-        if (result.success) {
+        if (result.success === true) {
           // Success path - never show "Invalid data format"
           toast({
             title: "PAN details saved",
@@ -318,7 +318,7 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
         }
 
         // Handle invoice step response
-        if (result.success) {
+        if (result.success === true) {
           // Success path - proceed to next step
           toast({
             title: "Step 2 completed",
@@ -419,7 +419,7 @@ export function OnboardingForm({ initialData }: OnboardingFormProps) {
         }
 
         // Handle response based on success flag
-        if (result.success) {
+        if (result.success === true) {
           // DEV-only log
           if (process.env.NODE_ENV === "development") {
             console.log("[onboarding] Business step completed successfully")

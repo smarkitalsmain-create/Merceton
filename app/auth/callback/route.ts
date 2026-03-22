@@ -1,57 +1,45 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
-import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
+
+/**
+ * Only allow same-origin relative paths (open-redirect safe).
+ */
+function getSafeNextPath(raw: string | null): string | null {
+  if (raw == null) return null
+  const next = raw.trim()
+  if (!next.startsWith("/")) return null
+  if (next.startsWith("//")) return null
+  if (next.includes("://")) return null
+  if (next.includes("\\")) return null
+  return next
+}
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const code = url.searchParams.get("code")
+  const nextRaw = url.searchParams.get("next")
 
   if (!code) {
-    console.warn("[auth/callback] Missing code param, redirecting to /sign-in")
-    return NextResponse.redirect(new URL("/sign-in", req.url))
+    return NextResponse.redirect(new URL("/sign-in", url.origin))
   }
 
   const supabase = createSupabaseServerClient()
 
-  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+  const { error } = await supabase.auth.exchangeCodeForSession(code)
 
-  if (exchangeError) {
-    console.error("[auth/callback] exchangeCodeForSession error:", exchangeError.message)
-    return NextResponse.redirect(new URL("/sign-in", req.url))
+  if (error) {
+    console.error("[auth/callback] exchangeCodeForSession:", error.message)
+    return NextResponse.redirect(new URL("/sign-in", url.origin))
   }
 
-  const { data: userData, error: userError } = await supabase.auth.getUser()
-
-  if (userError || !userData?.user) {
-    console.error("[auth/callback] getUser error or missing user:", userError?.message)
-    return NextResponse.redirect(new URL("/sign-in", req.url))
+  const safeNext = getSafeNextPath(nextRaw)
+  if (safeNext) {
+    return NextResponse.redirect(new URL(safeNext, url.origin))
   }
 
-  const authUserId = userData.user.id
-  console.log("[auth/callback] Session established for user:", authUserId)
-
-  let hasMerchant = false
-
-  try {
-    const dbUser = await prisma.user.findUnique({
-      where: { authUserId },
-      include: { merchant: true },
-    })
-
-    hasMerchant = !!dbUser?.merchant
-    console.log("[auth/callback] DB user:", {
-      authUserId,
-      dbUserId: dbUser?.id,
-      hasMerchant,
-    })
-  } catch (err) {
-    console.error("[auth/callback] Error checking merchant for user:", authUserId, err)
-  }
-
-  const targetPath = hasMerchant ? "/dashboard" : "/onboarding/create-store"
-  console.log("[auth/callback] Redirecting user", authUserId, "to", targetPath)
-
-  return NextResponse.redirect(new URL(targetPath, req.url))
+  // Default: app home. Configure Supabase "Redirect URLs" / email templates to pass
+  // ?next=/onboarding/create-store for first-time merchant onboarding if needed.
+  return NextResponse.redirect(new URL("/dashboard", url.origin))
 }

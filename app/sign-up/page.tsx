@@ -2,29 +2,11 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Store, TrendingUp, CreditCard, Zap, Shield } from "lucide-react"
-import { createSupabaseBrowserClient } from "@/lib/supabase/client"
-import { getSiteUrl } from "@/lib/site"
-import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout"
+import AuthShell from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-
-const BULLETS = [
-  { icon: Store, text: "Your store, your brand" },
-  { icon: TrendingUp, text: "Sell and scale with one dashboard" },
-  { icon: CreditCard, text: "Transparent fees, weekly payouts" },
-  { icon: Zap, text: "Go live in minutes, no code" },
-  { icon: Shield, text: "Secure payments and payouts" },
-]
-
-const TESTIMONIAL = {
-  quote: "We went from idea to first sale in a weekend. Merceton just works.",
-  author: "Founder",
-  role: "D2C brand",
-}
-
-const STATS = ["Weekly payouts", "Zero code setup", "Custom domain"]
+import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
@@ -48,34 +30,36 @@ export default function SignUpPage() {
 
     try {
       const supabase = createSupabaseBrowserClient()
-      const { error: err } = await supabase.auth.signUp({
+      const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${getSiteUrl()}/auth/callback`,
+          emailRedirectTo:
+            typeof window !== "undefined"
+              ? `${window.location.origin}/auth/callback?next=${encodeURIComponent("/onboarding/create-store")}`
+              : undefined,
         },
       })
 
-      if (err) {
-        setError(err.message)
+      if (signUpError) {
+        setError(signUpError.message)
         return
       }
 
       setMessage("Check your email to confirm your account.")
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Unknown error")
+      setError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <AuthSplitLayout
+    <AuthShell
       title="Create account"
-      subtitle="Enter your details to get started."
-      bullets={BULLETS}
-      testimonial={TESTIMONIAL}
-      stats={STATS}
+      subtitle="Start selling with Merceton — create your merchant account."
+      mode="signup"
+      variant="merchant"
       footerLink={{
         label: "Already have an account?",
         href: "/sign-in",
@@ -93,57 +77,49 @@ export default function SignUpPage() {
             {message}
           </p>
         )}
-
         <div className="space-y-2">
-          <Label htmlFor="signup-email">Email</Label>
+          <Label htmlFor="email">Email</Label>
           <Input
-            id="signup-email"
+            id="email"
             type="email"
             autoComplete="email"
-            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            disabled={loading}
-            className="bg-background"
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="signup-password">Password</Label>
+          <Label htmlFor="password">Password</Label>
           <Input
-            id="signup-password"
+            id="password"
             type="password"
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            disabled={loading}
-            className="bg-background"
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="signup-confirm">Confirm password</Label>
+          <Label htmlFor="confirmPassword">Confirm password</Label>
           <Input
-            id="signup-confirm"
+            id="confirmPassword"
             type="password"
             autoComplete="new-password"
-            placeholder="Re-enter password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
-            disabled={loading}
-            className="bg-background"
           />
         </div>
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={loading}
-          aria-busy={loading}
-        >
-          {loading ? "Creating account…" : "Sign up"}
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? "Creating…" : "Sign up"}
         </Button>
+        <p className="text-center text-xs text-muted-foreground">
+          By signing up you agree to our terms. Need help?{" "}
+          <Link href="mailto:support@merceton.com" className="text-primary underline">
+            Contact support
+          </Link>
+        </p>
       </form>
-    </AuthSplitLayout>
+    </AuthShell>
   )
 }
