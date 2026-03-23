@@ -7,6 +7,7 @@ import {
   TrackingResult,
   WarehouseInput,
   WarehouseResult,
+  ShippingCostResult,
 } from "@/lib/logistics/types"
 import {
   DelhiveryPincodeResponse,
@@ -29,50 +30,152 @@ export function mapDelhiveryStatusToInternal(status: string): ShipmentCreateResu
   return "shipment_created"
 }
 
-export function mapPincodeResponse(
-  res: DelhiveryPincodeResponse
-): ServiceabilityResult {
-  const deliveryCodes = (res?.delivery_codes as any[]) || []
-  console.error("[DelhiveryClient] Pincode response debug", {
-    hasDeliveryCodes: Array.isArray(deliveryCodes),
-    deliveryCodesCount: deliveryCodes.length,
-  })
+function digits6(s: string | undefined): string {
+  if (!s) return ""
+  const d = String(s).replace(/\D/g, "").slice(-6)
+  return d.length === 6 ? d : ""
+}
 
-  const first = deliveryCodes[0] || {}
-  const pin: string =
-    first.postal_code ??
-    first.pin_code ??
-    first.pincode ??
-    first.pin ??
+/**
+ * Delhivery pin-codes API: presence of at least one `delivery_codes` row means the pin is on the network.
+ * Older logic incorrectly required cod/pre_paid/pickup === "Y"; those can be "N" or absent while delivery still exists.
+ */
+export function mapPincodeResponse(
+  res: DelhiveryPincodeResponse,
+  requestedPincode: string
+): ServiceabilityResult {
+  const deliveryCodes = Array.isArray(res?.delivery_codes) ? (res.delivery_codes as any[]) : []
+  const first = deliveryCodes[0] ?? {}
+
+  const pinFromRow =
+    digits6(first.postal_code) ||
+    digits6(first.pin_code) ||
+    digits6(first.pincode) ||
+    digits6(first.pin) ||
     ""
 
-  const codFlag: string | undefined = first.cod ?? first.cod_fulfillment
-  const pickupFlag: string | undefined = first.pickup
-  const prePaidFlag: string | undefined = first.pre_paid
+  const pincode = pinFromRow || digits6(requestedPincode) || requestedPincode.trim()
 
-  const isServiceable =
-    !!first &&
-    (codFlag === "Y" || prePaidFlag === "Y" || pickupFlag === "Y")
+  const hasDelivery = deliveryCodes.length > 0
 
-  const isEmbargoed =
+  const remark = String(first.remark ?? first.remarks ?? (res as any)?.remark ?? "").trim()
+  const remarkLower = remark.toLowerCase()
+
+  // Explicit embargo flags from API
+  const embargoFlag =
     first.is_embargoed === "Y" ||
     first.embargo === "Y" ||
-    false
+    first.restricted === "Y"
 
-  const message = isServiceable
-    ? "Delivery is available to this pincode."
-    : "Delivery is currently not available to this pincode."
+  // Non-empty remark: only treat as embargo when it clearly says so (blank = not embargo)
+  const embargoByRemark =
+    remark.length > 0 &&
+    /embargo|temporarily\s+not\s+serviceable|restricted\s+delivery|delivery\s+blocked|not\s+serviceable\s+due\s+to/i.test(
+      remarkLower
+    )
+
+  const isEmbargoed = embargoFlag || embargoByRemark
+
+  const isServiceable = hasDelivery && !isEmbargoed
+
+  const codFlag = first.cod ?? first.cod_fulfillment
+  const prePaidFlag = first.pre_paid
+  const pickupFlag = first.pickup
+  const codAvailable = codFlag === "Y" || codFlag === true || codFlag === "y"
+
+  let message: string
+  if (isEmbargoed) {
+    message = remark || "Delivery temporarily unavailable at this pincode"
+  } else if (isServiceable) {
+    message = "Delivery is available to this pincode."
+  } else {
+    message = "Delivery is currently not available to this pincode."
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    console.error("[serviceability:normalize]", {
+      requestedPincode,
+      deliveryCodesCount: deliveryCodes.length,
+      hasDelivery,
+      embargoFlag,
+      embargoByRemark,
+      isEmbargoed,
+      isServiceable,
+      pincode,
+      remarkPreview: remark ? remark.slice(0, 120) : "",
+      cod: codFlag,
+      pre_paid: prePaidFlag,
+      pickup: pickupFlag,
+    })
+  }
 
   return {
     success: true,
-    pincode: pin,
+    pincode,
     serviceable: isServiceable,
     isEmbargoed,
     message,
-    cod: codFlag === "Y",
-    // Delhivery response does not include ETA in this endpoint; keep undefined.
+    cod: codAvailable,
     estimatedDeliveryDays: undefined,
     raw: res,
+  }
+}
+
+function toNumberOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null
+  if (typeof v === "number" && Number.isFinite(v)) return v
+  if (typeof v === "string") {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+/**
+ * Delhivery shipping charge estimation (invoice charges API) is loosely shaped.
+ * We look for `total_amount`-like fields and convert to INR + paise.
+ */
+export function mapDelhiveryShippingCostToResult(params: {
+  raw: unknown
+  serviceable: boolean
+  message: string
+}): ShippingCostResult {
+  const raw = params.raw as any
+
+  const totalAmountRaw =
+    raw?.total_amount ??
+    raw?.totalAmount ??
+    raw?.invoice?.total_amount ??
+    raw?.invoice?.totalAmount ??
+    raw?.data?.total_amount ??
+    raw?.data?.totalAmount
+
+  const totalAmount = toNumberOrNull(totalAmountRaw)
+
+  if (totalAmount === null) {
+    return {
+      success: false,
+      serviceable: params.serviceable,
+      estimatedShippingCostPaise: null,
+      estimatedShippingCostInr: null,
+      currency: "INR",
+      message: params.message || "Unable to calculate shipping right now. Please try again.",
+      raw,
+    }
+  }
+
+  // Delhivery typically returns amounts in INR (as a float). We convert to paise for internal usage.
+  const estimatedShippingCostInr = totalAmount
+  const estimatedShippingCostPaise = Math.round(estimatedShippingCostInr * 100)
+
+  return {
+    success: true,
+    serviceable: params.serviceable,
+    estimatedShippingCostPaise,
+    estimatedShippingCostInr,
+    currency: "INR",
+    message: params.message || "Estimated shipping cost calculated.",
+    raw,
   }
 }
 

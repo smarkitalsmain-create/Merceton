@@ -14,7 +14,8 @@ import { prisma } from "@/lib/prisma"
 import { createOrderSchema } from "@/lib/validations/order"
 import { generateOrderNumber } from "@/lib/order/generateOrderNumber"
 import { calculatePlatformFee, getEffectiveFeeConfigForFees } from "@/lib/fees"
-import { getServiceability } from "@/lib/logistics/service"
+import { calculateShippingCost, getServiceability } from "@/lib/logistics/service"
+import { validatePincode } from "@/lib/logistics/validators"
 
 export type CreateOrderResult =
   | { success: true; order: { id: string; orderNumber: string } }
@@ -36,6 +37,22 @@ export async function createOrder(input: unknown): Promise<CreateOrderResult> {
     if (!merchant) {
       return { success: false, error: "Store not found" }
     }
+
+    // Shipping origin is currently derived from merchant/store settings.
+    // TODO: when we have explicit warehouse/origin configuration, wire it here.
+    const storeSettings = await prisma.merchantStoreSettings.findUnique({
+      where: { merchantId: merchant.id },
+      select: { pincode: true },
+    })
+
+    let originPincode: string
+    try {
+      originPincode = validatePincode(storeSettings?.pincode ?? "")
+    } catch {
+      originPincode = validatePincode("110001")
+    }
+
+    const paymentMode = validated.paymentMethod === "COD" ? "cod" : "prepaid"
 
     try {
       const svc = await getServiceability("delhivery", { pincode: validated.pincode })
@@ -88,6 +105,30 @@ export async function createOrder(input: unknown): Promise<CreateOrderResult> {
       grossPaise += p.price * line.quantity
     }
 
+    // Estimate shipping before we persist totals.
+    // TODO: replace weight estimate with real package weight/dimensions once captured in checkout.
+    const DEFAULT_WEIGHT_GRAMS_PER_QTY = 1000
+    const totalWeightGrams = validated.items.reduce(
+      (sum, line) => sum + line.quantity * DEFAULT_WEIGHT_GRAMS_PER_QTY,
+      0
+    )
+
+    const shippingRes = await calculateShippingCost("delhivery", {
+      originPincode,
+      destinationPincode: validated.pincode,
+      weightGrams: totalWeightGrams,
+      paymentMode,
+      merchantId: merchant.id,
+    })
+
+    if (!shippingRes.serviceable) {
+      return { success: false, error: shippingRes.message || "Delivery not available at this pincode" }
+    }
+
+    if (!shippingRes.success || shippingRes.estimatedShippingCostPaise === null) {
+      return { success: false, error: shippingRes.message || "Unable to calculate shipping right now. Please try again." }
+    }
+
     const feeConfig = await getEffectiveFeeConfigForFees(merchant.id)
     const platformFeePaise = calculatePlatformFee(grossPaise, feeConfig)
     const netPaise = Math.max(0, grossPaise - platformFeePaise)
@@ -95,6 +136,8 @@ export async function createOrder(input: unknown): Promise<CreateOrderResult> {
     const grossAmount = new Decimal((grossPaise / 100).toFixed(2))
     const platformFee = new Decimal((platformFeePaise / 100).toFixed(2))
     const netPayable = new Decimal((netPaise / 100).toFixed(2))
+    const shippingFee = new Decimal((shippingRes.estimatedShippingCostPaise / 100).toFixed(2))
+    const totalAmount = grossAmount.plus(shippingFee)
 
     const orderNumber = await generateOrderNumber(prisma)
 
@@ -132,9 +175,9 @@ export async function createOrder(input: unknown): Promise<CreateOrderResult> {
           paymentStatus: PaymentStatus.PENDING,
           subtotal: grossAmount,
           tax: new Decimal(0),
-          shippingFee: new Decimal(0),
+          shippingFee,
           discount: new Decimal(0),
-          totalAmount: grossAmount,
+          totalAmount,
           grossAmount,
           platformFee,
           netPayable,
@@ -157,7 +200,7 @@ export async function createOrder(input: unknown): Promise<CreateOrderResult> {
               merchantId: merchant.id,
               paymentMethod: validated.paymentMethod as PaymentMethod,
               status: PaymentStatus.PENDING,
-              amount: grossAmount,
+              amount: totalAmount,
             },
           },
         },

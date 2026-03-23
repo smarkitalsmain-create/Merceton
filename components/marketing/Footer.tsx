@@ -1,8 +1,11 @@
+import Link from "next/link"
+
 const footerLinks = [
-  { label: "Privacy Policy", href: "/legal/privacy" },
-  { label: "Terms of Service", href: "/legal/terms" },
-  { label: "Refund Policy", href: "/legal/refund" },
-  { label: "Grievance", href: "/legal/grievance" },
+  { label: "Privacy Policy", href: "/privacy-policy" },
+  { label: "Refund & Cancellation Policy", href: "/refund-cancellation-policy" },
+  { label: "Shipping & Delivery Policy", href: "/shipping-delivery-policy" },
+  { label: "Terms & Conditions", href: "/terms-and-conditions" },
+  { label: "Merchant Agreement", href: "/merchant-agreement" },
 ]
 
 const Footer = () => (
@@ -46,12 +49,12 @@ const Footer = () => (
           <ul className="space-y-2">
             {footerLinks.map((link) => (
               <li key={link.href}>
-                <a
+                <Link
                   href={link.href}
                   className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {link.label}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>

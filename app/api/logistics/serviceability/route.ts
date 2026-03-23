@@ -24,6 +24,13 @@ export async function GET(req: NextRequest) {
       pincode: normalizedPincode,
     })
 
+    if (process.env.NODE_ENV === "development") {
+      console.error("[serviceability:api]", {
+        pincode: normalizedPincode,
+        normalized: result,
+      })
+    }
+
     return NextResponse.json({ ok: true, result })
   } catch (error) {
     return createErrorResponse(error)

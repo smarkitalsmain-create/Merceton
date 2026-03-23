@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -18,8 +18,10 @@ import { useCart } from "@/hooks/use-cart"
 import { useToast } from "@/hooks/use-toast"
 import {
   checkPincodeServiceability,
+  calculateShippingCost,
   type ServiceabilityResultClient,
   type ServiceabilityStatus,
+  type ShippingCostResultClient,
 } from "@/lib/frontend/logistics"
 import { cn } from "@/lib/utils"
 
@@ -51,9 +53,19 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
   const [pinMessage, setPinMessage] = useState<string | null>(null)
   const [isCheckingPin, setIsCheckingPin] = useState(false)
 
+  type ShippingStatus = "idle" | "checking" | "ready" | "error"
+  const [shippingStatus, setShippingStatus] = useState<ShippingStatus>("idle")
+  const [shippingMessage, setShippingMessage] = useState<string | null>(null)
+  const [shippingCostInr, setShippingCostInr] = useState<number | null>(null)
+  const lastShippingKeyRef = useRef<string | null>(null)
+
   const [pending, startTransition] = useTransition()
 
   const debouncedPin = pincode.replace(/\D/g, "").slice(0, 6)
+  const estimatedWeightGrams = cart.reduce(
+    (sum, item) => sum + item.quantity * 1000,
+    0
+  )
 
   const runPinCheck = useCallback(async (code: string) => {
     if (code.length !== 6) {
@@ -84,9 +96,74 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
     return () => clearTimeout(t)
   }, [debouncedPin, runPinCheck])
 
+  useEffect(() => {
+    // Only estimate shipping once the destination pincode is confirmed serviceable.
+    if (pinStatus !== "serviceable" || debouncedPin.length !== 6) {
+      setShippingStatus("idle")
+      setShippingMessage(null)
+      setShippingCostInr(null)
+      lastShippingKeyRef.current = null
+      return
+    }
+
+    const shippingKey = `${merchantId}|${debouncedPin}|${paymentMethod}|${estimatedWeightGrams}`
+    if (lastShippingKeyRef.current === shippingKey) {
+      return
+    }
+
+    // Block checkout totals while the (debounced) shipping estimate is being refreshed.
+    setShippingStatus("checking")
+    setShippingMessage(null)
+    setShippingCostInr(null)
+
+    let cancelled = false
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          if (cancelled) return
+          lastShippingKeyRef.current = shippingKey
+
+          const res: ShippingCostResultClient = await calculateShippingCost({
+            merchantId,
+            destinationPincode: debouncedPin,
+            paymentMethod,
+            weightGrams: estimatedWeightGrams,
+          })
+
+          if (cancelled) return
+
+          if (!res.success || !res.serviceable || res.estimatedShippingCostInr === null) {
+            setShippingStatus("error")
+            setShippingMessage(res.message || "Unable to calculate shipping right now. Please try again.")
+            return
+          }
+
+          setShippingStatus("ready")
+          setShippingCostInr(res.estimatedShippingCostInr)
+          setShippingMessage(null)
+        } catch {
+          if (cancelled) return
+          setShippingStatus("error")
+          setShippingMessage("Unable to calculate shipping right now. Please try again.")
+        }
+      })()
+    }, 400)
+
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [pinStatus, debouncedPin, merchantId, paymentMethod, estimatedWeightGrams])
+
   const checkoutBlocked = useMemo(
-    () => statusBlocksCheckout(pinStatus),
-    [pinStatus]
+    () => {
+      const pinBlocked = statusBlocksCheckout(pinStatus)
+      if (pinBlocked) return true
+      // When serviceable, we require a shipping estimate before enabling checkout totals.
+      if (pinStatus === "serviceable") return shippingStatus !== "ready"
+      return true
+    },
+    [pinStatus, shippingStatus]
   )
 
   const handlePlaceOrder = () => {
@@ -222,9 +299,31 @@ export function CheckoutForm({ storeSlug, merchantId }: CheckoutFormProps) {
             </li>
           ))}
         </ul>
-        <p className="text-right text-lg font-semibold">
-          Total: ₹{getTotalPrice().toFixed(2)}
-        </p>
+        <div className="space-y-1 text-right">
+          <p className="text-sm text-muted-foreground">Subtotal: ₹{getTotalPrice().toFixed(2)}</p>
+
+          {pinStatus === "serviceable" && (
+            <p className="text-sm text-muted-foreground">
+              {shippingStatus === "checking"
+                ? "Shipping: Calculating…"
+                : shippingCostInr !== null
+                  ? `Shipping: ₹${shippingCostInr.toFixed(2)}`
+                  : "Shipping: —"}
+            </p>
+          )}
+
+          {pinStatus === "serviceable" && shippingStatus === "error" && shippingMessage && (
+            <p className="text-xs text-destructive">{shippingMessage}</p>
+          )}
+
+          <p className="text-lg font-semibold">
+            Total: ₹
+            {(
+              getTotalPrice() +
+              (pinStatus === "serviceable" && shippingCostInr !== null ? shippingCostInr : 0)
+            ).toFixed(2)}
+          </p>
+        </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
           <p className="text-xs font-medium text-muted-foreground mb-1">Delivery check</p>

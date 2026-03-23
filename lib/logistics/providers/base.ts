@@ -7,6 +7,8 @@ import type {
   ShipmentCreateResult,
   LabelResult,
   TrackingResult,
+  ShippingCostInput,
+  ShippingCostResult,
   LogisticsProviderKey,
 } from "../types"
 
@@ -18,6 +20,8 @@ export interface ShippingProvider {
   readonly key: LogisticsProviderKey
 
   checkServiceability(input: ServiceabilityInput): Promise<ServiceabilityResult>
+
+  calculateShippingCost(input: ShippingCostInput): Promise<ShippingCostResult>
 
   createWarehouse(input: WarehouseInput): Promise<WarehouseResult>
 

@@ -18,6 +18,15 @@ function isStaticOrInternal(pathname: string) {
   )
 }
 
+/** Public marketing legal pages (merceton.com root host) — must never be auth-gated */
+const PUBLIC_MARKETING_POLICY_PATHS = new Set([
+  "/privacy-policy",
+  "/refund-cancellation-policy",
+  "/shipping-delivery-policy",
+  "/terms-and-conditions",
+  "/merchant-agreement",
+])
+
 type HostType = "landing" | "app" | "admin"
 
 function getHostType(host: string | null): HostType {
@@ -108,6 +117,11 @@ export async function middleware(req: NextRequest) {
 
   // Skip Next internals, APIs, and static assets
   if (isStaticOrInternal(pathname)) {
+    return NextResponse.next()
+  }
+
+  // Legal policy pages: public, indexable, no Supabase session required
+  if (PUBLIC_MARKETING_POLICY_PATHS.has(pathname)) {
     return NextResponse.next()
   }
 

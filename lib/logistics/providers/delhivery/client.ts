@@ -196,5 +196,28 @@ export class DelhiveryClient {
     // TODO: align with Delhivery tracking API
     return this.request<any>(`/api/track/${encodeURIComponent(awb)}`)
   }
+
+  async calculateShippingCost(params: {
+    // md: billing mode as per Delhivery invoice/charges API (E=Express, S=Surface)
+    md: "E" | "S"
+    // Chargeable weight in grams
+    cgm: number
+    o_pin: string
+    d_pin: string
+    // Shipment status for invoice calculation
+    ss: "Delivered" | "RTO" | "DTO"
+  }): Promise<any> {
+    const query = new URLSearchParams({
+      md: params.md,
+      cgm: String(Math.max(0, Math.floor(params.cgm))),
+      o_pin: params.o_pin,
+      d_pin: params.d_pin,
+      ss: params.ss,
+    })
+
+    // Delhivery invoice charges endpoint used for shipping charge estimation.
+    // Docs: https://delhivery-express-api-doc.readme.io/reference/testinput-7
+    return this.request<any>(`/api/kinko/v1/invoice/charges/.json?${query.toString()}`)
+  }
 }
 

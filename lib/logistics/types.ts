@@ -122,3 +122,30 @@ export const TrackingResultSchema = z.object({
 
 export type TrackingResult = z.infer<typeof TrackingResultSchema>
 
+export const ShippingCostInputSchema = z.object({
+  // Provider is optional because the backend route typically derives it.
+  provider: z.string().optional(),
+  originPincode: PincodeSchema,
+  destinationPincode: PincodeSchema,
+  // Chargeable weight in grams. Checkout currently doesn't collect weight, so
+  // we use a safe default in the route/provider until we wire real package data.
+  weightGrams: z.number().positive().optional(),
+  paymentMode: z.enum(["prepaid", "cod"]).optional(),
+  codAmount: z.number().nonnegative().optional(),
+  merchantId: z.string().optional(),
+})
+
+export type ShippingCostInput = z.infer<typeof ShippingCostInputSchema>
+
+export const ShippingCostResultSchema = z.object({
+  success: z.boolean(),
+  serviceable: z.boolean(),
+  estimatedShippingCostPaise: z.number().int().nullable(),
+  estimatedShippingCostInr: z.number().nullable(),
+  currency: z.literal("INR"),
+  message: z.string(),
+  raw: z.unknown().optional(),
+})
+
+export type ShippingCostResult = z.infer<typeof ShippingCostResultSchema>
+

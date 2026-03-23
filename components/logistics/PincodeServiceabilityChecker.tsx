@@ -32,6 +32,13 @@ export function PincodeServiceabilityChecker({
     setStatus("checking")
     setMessage(null)
     const result: ServiceabilityResultClient = await checkPincodeServiceability(pincode)
+    if (process.env.NODE_ENV === "development") {
+      console.error("[serviceability:ui]", {
+        pincode,
+        derivedStatus: result.status,
+        message: result.message,
+      })
+    }
     setStatus(result.status)
     setMessage(result.message)
   }

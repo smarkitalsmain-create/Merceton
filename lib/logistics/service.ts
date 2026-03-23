@@ -8,9 +8,16 @@ import type {
   TrackingResult,
   WarehouseInput,
   WarehouseResult,
+  ShippingCostInput,
+  ShippingCostResult,
 } from "@/lib/logistics/types"
 import { getShippingProvider } from "@/lib/logistics/registry"
-import { validateServiceabilityInput, validateShipmentCreateInput, validateWarehouseInput } from "@/lib/logistics/validators"
+import {
+  validateServiceabilityInput,
+  validateShipmentCreateInput,
+  validateWarehouseInput,
+  validateShippingCostInput,
+} from "@/lib/logistics/validators"
 
 export async function getServiceability(
   providerKey: LogisticsProviderKey,
@@ -63,5 +70,14 @@ export async function getShipmentTracking(
 ): Promise<TrackingResult> {
   const provider = getShippingProvider(providerKey)
   return provider.trackShipment(awb)
+}
+
+export async function calculateShippingCost(
+  providerKey: LogisticsProviderKey,
+  input: ShippingCostInput
+): Promise<ShippingCostResult> {
+  const provider = getShippingProvider(providerKey)
+  const validated = validateShippingCostInput(input)
+  return provider.calculateShippingCost(validated)
 }
 

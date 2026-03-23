@@ -1,5 +1,10 @@
-import { validatePincode, validateShipmentCreateInput, validateWarehouseInput } from "@/lib/logistics/validators"
-import type { ServiceabilityInput, ShipmentCreateInput, WarehouseInput } from "@/lib/logistics/types"
+import {
+  validatePincode,
+  validateShipmentCreateInput,
+  validateWarehouseInput,
+  validateShippingCostInput,
+} from "@/lib/logistics/validators"
+import type { ServiceabilityInput, ShipmentCreateInput, WarehouseInput, ShippingCostInput } from "@/lib/logistics/types"
 
 export function validateDelhiveryServiceabilityInput(
   input: ServiceabilityInput
@@ -18,5 +23,18 @@ export function validateDelhiveryShipmentInput(
   input: ShipmentCreateInput
 ): ShipmentCreateInput {
   return validateShipmentCreateInput(input)
+}
+
+export function validateDelhiveryShippingCostInput(
+  input: ShippingCostInput
+): ShippingCostInput {
+  // Ensure pincode formats are correct (route might pass already-validated values, but
+  // provider-level validation keeps invariants strong).
+  const parsed = validateShippingCostInput(input)
+  return {
+    ...parsed,
+    originPincode: validatePincode(parsed.originPincode),
+    destinationPincode: validatePincode(parsed.destinationPincode),
+  }
 }
 

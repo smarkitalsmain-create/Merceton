@@ -4,6 +4,7 @@ import {
   ServiceabilityInputSchema,
   WarehouseInputSchema,
   ShipmentCreateInputSchema,
+  ShippingCostInputSchema,
 } from "./types"
 import { ValidationError } from "./errors"
 
@@ -37,6 +38,14 @@ export function validateShipmentCreateInput(input: unknown) {
     throw new ValidationError(
       parsed.error.errors[0]?.message ?? "Invalid shipment create input"
     )
+  }
+  return parsed.data
+}
+
+export function validateShippingCostInput(input: unknown) {
+  const parsed = ShippingCostInputSchema.safeParse(input)
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.errors[0]?.message ?? "Invalid shipping cost input")
   }
   return parsed.data
 }
