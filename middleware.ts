@@ -18,8 +18,10 @@ function isStaticOrInternal(pathname: string) {
   )
 }
 
-/** Public marketing legal pages (merceton.com root host) — must never be auth-gated */
-const PUBLIC_MARKETING_POLICY_PATHS = new Set([
+/** Public marketing pages (merceton.com root host) — must never be auth-gated */
+const PUBLIC_MARKETING_PATHS = new Set([
+  "/about-us",
+  "/contact-us",
   "/privacy-policy",
   "/refund-cancellation-policy",
   "/shipping-delivery-policy",
@@ -120,8 +122,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Legal policy pages: public, indexable, no Supabase session required
-  if (PUBLIC_MARKETING_POLICY_PATHS.has(pathname)) {
+  // Public marketing pages: indexable, no Supabase session required
+  if (PUBLIC_MARKETING_PATHS.has(pathname)) {
     return NextResponse.next()
   }
 

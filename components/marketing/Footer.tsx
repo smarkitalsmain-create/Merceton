@@ -17,6 +17,24 @@ const Footer = () => (
           <p className="text-sm leading-relaxed text-muted-foreground">
             A product of Smarkitals Technologies India Pvt Ltd
           </p>
+          <ul className="mt-4 space-y-2">
+            <li>
+              <Link
+                href="/about-us"
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                About Us
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/contact-us"
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Contact Us
+              </Link>
+            </li>
+          </ul>
         </div>
 
         <div>
